@@ -1,0 +1,62 @@
+# Python Bytecode and Caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / Packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments (ignoring common venv names)
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# PyCharm / JetBrains IDE
+.idea/
+.vscode/
+
+# Windows specific
+thumbs.db
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment variables (sensitive data)
+.env
+.env.local
+.env.*.local
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints
+
+# MyPy cache
+.mypy_cache/
+
