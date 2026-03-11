@@ -337,7 +337,6 @@ class TestSmartCollar:
 
     def test_many_records(self):
         """模拟完整一天（1440 分钟 = 1440 ticks）应无错误"""
-        """Simulate a full day (1440 minutes) without errors"""
         collar = SmartCollar(
             start_time=datetime(2025, 6, 1, 0, 0, 0),
             tick_interval=timedelta(minutes=1),
