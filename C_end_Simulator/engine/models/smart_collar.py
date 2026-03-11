@@ -128,7 +128,7 @@ class SmartCollar:
         self,
         profile: Optional[DogProfile] = None,
         start_time: Optional[datetime] = None,
-        tick_interval: timedelta = timedelta(minutes=15),
+        tick_interval: timedelta = timedelta(minutes=1),
         seed: Optional[int] = None,
     ) -> None:
         self._rng = np.random.default_rng(seed)
