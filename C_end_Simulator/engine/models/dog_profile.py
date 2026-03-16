@@ -16,10 +16,6 @@ from typing import Optional
 import numpy as np
 
 from engine.traits.base_trait import BaseTrait
-from engine.traits import CardiacRisk, RespiratoryRisk, OrthoRisk
-
-# 可选的 Trait 类型池，random_profile() 会从中随机抽取 0~2 个特质
-_TRAIT_POOL = [CardiacRisk, RespiratoryRisk, OrthoRisk]
 
 
 @dataclass
@@ -115,11 +111,19 @@ class DogProfile:
         # 按概率分布决定 trait 数量：30% 没有 trait，50% 有 1 个，20% 有 2 个
         # 0~2 个 trait
         n_traits = int(rng.choice([0, 1, 2], p=[0.3, 0.5, 0.2]))
-        # 从 _TRAIT_POOL 中不重复地随机抽取指定数量的 trait
-        chosen_indices = rng.choice(
-            len(_TRAIT_POOL), size=min(n_traits, len(_TRAIT_POOL)), replace=False
-        )
-        traits = [_TRAIT_POOL[i]() for i in chosen_indices]
+        
+        # ✅ 从自动注册表中获取所有可用的 Trait
+        trait_pool = BaseTrait.get_all_trait_names()
+        
+        # 从 trait_pool 中不重复地随机抽取指定数量的 trait
+        if n_traits > 0 and trait_pool:
+            chosen_indices = rng.choice(
+                len(trait_pool), size=min(n_traits, len(trait_pool)), replace=False
+            )
+            # 根据索引获取 Trait 类并实例化
+            traits = [BaseTrait.get_trait(trait_pool[i])() for i in chosen_indices]
+        else:
+            traits = []
 
         return DogProfile(
             user_id=user_id,
