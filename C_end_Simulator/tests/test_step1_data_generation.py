@@ -16,13 +16,14 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 import numpy as np
-import tests
+# import tests
 import pytest
 
 from engine.models.dog_profile import DogProfile
 from engine.models.smart_collar import SmartCollar
 from engine.traits import CardiacRisk, RespiratoryRisk, OrthoRisk
-from engine.events.base_event import BaseEvent, EventPhase
+# from engine.events.base_event import BaseEvent, EventPhase
+from engine.events.base_event import EventPhase
 from engine.events.fever import FeverEvent
 from engine.events.injury import InjuryEvent
 from engine.events.event_manager import EventManager

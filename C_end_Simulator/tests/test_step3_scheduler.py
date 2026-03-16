@@ -16,7 +16,7 @@ Step 3 测试：验证调度器能串起 SmartCollar → FileExporter
 from __future__ import annotations
 
 import json
-import tempfile
+# import tempfile
 from pathlib import Path
 
 import pytest

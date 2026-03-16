@@ -11,7 +11,7 @@ Step 2 测试：验证数据能正确写入文件
 from __future__ import annotations
 
 import json
-import tempfile
+# import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
