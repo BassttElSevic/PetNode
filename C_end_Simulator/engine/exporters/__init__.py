@@ -1,9 +1,10 @@
 # engine/exporters 包 —— 数据输出层（策略模式）
 # BaseExporter 定义了统一的导出接口（export / flush / close）；
-# FileExporter 是当前阶段使用的实现，将 record 以 JSONL 格式追加写入本地文件；
-# http_exporter 是未来阶段的占位，用于将数据上报至远程服务器 API。
+# FileExporter 将 record 以 JSONL 格式追加写入本地文件；
+# HttpExporter 通过 HTTP POST 将数据上报至 Flask 服务器。            ← 改了注释
 
 from .base_exporter import BaseExporter
 from .file_exporter import FileExporter
+from .http_exporter import HttpExporter                              # ← 🆕 新增这一行
 
-__all__ = ["BaseExporter", "FileExporter"]
+__all__ = ["BaseExporter", "FileExporter", "HttpExporter"]           # ← 🆕 加上 HttpExporter
