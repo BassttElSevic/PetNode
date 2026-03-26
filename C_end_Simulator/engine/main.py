@@ -3,11 +3,17 @@ engine/main.py —— 核心调度器
 
 职责：
   - 解析命令行参数（用户数量、狗数量、Tick 数、间隔、种子等）
-  - 创建 SmartCollar 实例 + FileExporter + DummyListener
-  - 主循环：每隔 real_interval 秒调用项圈生成数据 → 导出到文件
+  - 创建 SmartCollar 实例 + HttpExporter(主通道) + FileExporter(TUI缓冲) + DummyListener
+  - 主循环：每隔 real_interval 秒调用项圈生成数据 → 发到 Flask + 写缓冲文件
   - 支持多线程：每个 tick 内，使用线程池并行为每只狗生成数据
   - 轮询 command.json 读取控制指令（stop/pause/resume/set_interval）
   - 优雅退出：Ctrl-C / SIGTERM
+
+数据流向：
+  record → HttpExporter → Flask 服务器（永久保存）
+                │
+                └── 断网 → offline_cache/（自动补发后删除）
+  record → FileExporter → realtime_stream.jsonl（TUI 缓冲，滚动截断，最多 500 行）
 
 用法::
 
@@ -32,7 +38,7 @@ from typing import Optional
 import os
 
 from engine.models import DogProfile, SmartCollar
-from engine.exporters import FileExporter
+from engine.exporters import FileExporter, HttpExporter              # ← 🆕 加上 HttpExporter
 from engine.listeners import DummyListener
 
 # ────────────────── 日志 ──────────────────
@@ -46,8 +52,10 @@ logger = logging.getLogger("engine")
 _DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output_data"
 # 控制指令文件名（TUI/GUI 写指令 → Engine 读指令）
 _COMMAND_FILE = "command.json"
+# TUI 缓冲文件最大保留行数（超出后滚动截断，只保留最新的）
+_BUFFER_MAX_LINES = 500
 
-# ────────────────── 指令读取 ──────────────────
+# ────────────────── 工具函数 ──────────────────
 
 
 def read_command(output_dir: Path) -> Optional[dict]:
@@ -98,6 +106,50 @@ def write_engine_status(output_dir: Path, status: dict) -> None:
         logger.warning("写入 engine_status.json 失败: %s", exc)
 
 
+def _truncate_buffer(filepath: Path, keep_lines: int = _BUFFER_MAX_LINES) -> None:
+    """
+    截断 TUI 缓冲文件，只保留最后 keep_lines 行。
+
+    防止 realtime_stream.jsonl 无限增长——
+    历史数据已经通过 HttpExporter 发到 Flask 永久保存了，
+    本地文件只需要保留最近的数据给 TUI 实时显示。
+
+    Parameters
+    ----------
+    filepath : Path
+        要截断的文件路径（realtime_stream.jsonl）
+    keep_lines : int
+        保留的最大行数（默认 500）
+    """
+    try:
+        # 文件不存在，跳过
+        if not filepath.exists():
+            return
+
+        # 读取所有行
+        lines = filepath.read_text(encoding="utf-8").splitlines()
+
+        # 行数未超限，不需要截断
+        if len(lines) <= keep_lines:
+            return
+
+        # 只保留最后 keep_lines 行（最新的数据）
+        recent = lines[-keep_lines:]
+
+        # 重写文件（覆盖模式，丢弃旧数据）
+        filepath.write_text(
+            "\n".join(recent) + "\n",
+            encoding="utf-8",
+        )
+
+        logger.debug(
+            "TUI 缓冲文件已截断: %s (%d → %d 行)",
+            filepath.name, len(lines), keep_lines,
+        )
+    except OSError as exc:
+        logger.warning("截断缓冲文件失败: %s", exc)
+
+
 # ────────────────── 参数解析 ──────────────────
 
 
@@ -118,6 +170,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
       --interval      每轮 tick 之间的真实等待秒数（默认 0，即尽快跑完）
       --seed          随机种子（用于可复现模拟）
       --output-dir    输出目录（默认 output_data/）
+      --api-url       Flask 服务器 API 地址（默认 http://flask-server:5000/api/data）
       --log-level     日志级别（默认 INFO）
     """
     parser = argparse.ArgumentParser(
@@ -151,6 +204,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output-dir", type=str, default=None,
         help="输出目录（默认 output_data/）",
     )
+    parser.add_argument(                                             # ← 🆕 新增参数
+        "--api-url", type=str,
+        default="http://flask-server:5000/api/data",
+        help="Flask 服务器 API 地址（默认 http://flask-server:5000/api/data）",
+    )
     parser.add_argument(
         "--log-level", type=str, default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -170,6 +228,7 @@ def run(
     seed: int | None = None,
     output_dir: str | Path | None = None,
     num_users: int = 1,
+    api_url: str = "http://flask-server:5000/api/data",              # ← 🆕 新增参数
 ) -> list[dict]:
     """
     运行模拟引擎主循环（支持多线程并行生成数据）。
@@ -190,6 +249,8 @@ def run(
         输出目录
     num_users : int
         用户数量（一个用户可拥有多条狗，狗按轮询分配给用户）
+    api_url : str
+        Flask 服务器 API 地址（HttpExporter 的目标）
 
     Returns
     -------
@@ -223,10 +284,16 @@ def run(
             i + 1, collar.profile.user_id, collar.profile,
         )
 
-    # ── 创建 exporter（数据导出器）──
-    # 当前阶段使用 FileExporter，将数据写入本地 JSONL 文件
-    exporter = FileExporter(output_dir=out_path)
-    logger.info("FileExporter 已就绪: %s", exporter.filepath)
+    # ── 创建 exporters（数据导出器）──
+
+    # 主通道：HttpExporter — 将数据 POST 到 Flask 服务器（永久保存）
+    # 断网时自动缓存到 offline_cache/，恢复后自动补发
+    http_exporter = HttpExporter(api_url=api_url)
+    logger.info("HttpExporter 已就绪 (主通道): %s", http_exporter.api_url)
+
+    # TUI 缓冲：FileExporter — 写本地文件给 TUI 实时读取（滚动截断，不永久保存）
+    file_exporter = FileExporter(output_dir=out_path)
+    logger.info("FileExporter 已就绪 (TUI缓冲): %s", file_exporter.filepath)
 
     # ── 创建 listener（指令监听器）──
     # 当前阶段使用 DummyListener，不连接任何远程服务器
@@ -257,7 +324,7 @@ def run(
     signal.signal(signal.SIGTERM, _signal_handler)
 
     # ── 主循环 ──
-    # 每个 tick：轮询指令 → 生成数据 → 导出到文件 → 等待间隔
+    # 每个 tick：轮询指令 → 生成数据 → 发 HTTP + 写缓冲 → 等待间隔
     all_records: list[dict] = []
     paused = False
 
@@ -310,12 +377,20 @@ def run(
                 # 收集各线程生成的记录（as_completed 在主线程中顺序回收结果）
                 for future in as_completed(futures):
                     record = future.result()
-                    exporter.export(record)
+                    # 主通道：POST 到 Flask（失败则自动缓存到 offline_cache/）
+                    http_exporter.export(record)
+                    # TUI 缓冲：写本地文件（给 TUI 实时读取显示）
+                    file_exporter.export(record)
                     all_records.append(record)
 
-                # 定期 flush 确保数据持久化（每 10 ticks 或最后一个 tick）
+                # 定期 flush（每 10 ticks 或最后一个 tick）
                 if (tick + 1) % 10 == 0 or tick == num_ticks - 1:
-                    exporter.flush()
+                    http_exporter.flush()            # 补发离线缓存（如果有的话）
+                    file_exporter.flush()            # TUI 缓冲刷盘
+
+                # 定期截断 TUI 缓冲文件（每 100 ticks），防止无限膨胀
+                if (tick + 1) % 100 == 0:
+                    _truncate_buffer(file_exporter.filepath)
 
                 # 定期更新引擎状态文件（每 50 ticks 或最后一个 tick）
                 if (tick + 1) % 50 == 0 or tick == num_ticks - 1:
@@ -341,8 +416,10 @@ def run(
 
     finally:
         # ── 清理：无论正常结束还是异常退出，都确保资源被释放 ──
-        exporter.flush()
-        exporter.close()
+        http_exporter.flush()                        # 最后一次补发离线缓存
+        http_exporter.close()                        # 关闭 HTTP Session
+        file_exporter.flush()                        # TUI 缓冲刷盘
+        file_exporter.close()                        # 关闭文件句柄
         listener.close()
         # 写入最终引擎状态（running=False）
         write_engine_status(out_path, {
@@ -354,8 +431,8 @@ def run(
             "current_tick": len(all_records) // max(num_dogs, 1),
         })
         logger.info(
-            "引擎已停止。共生成 %d 条记录，已写入 %s",
-            len(all_records), exporter.filepath,
+            "引擎已停止。共生成 %d 条记录, HTTP 发送=%s, TUI 缓冲=%s",
+            len(all_records), http_exporter, file_exporter.filepath,
         )
 
     return all_records
@@ -384,8 +461,9 @@ def main(argv: list[str] | None = None) -> None:
 
     logger.info("PetNode 引擎启动")
     logger.info(
-        "参数: users=%d, dogs=%d, ticks=%d, tick_minutes=%d, interval=%.2f, seed=%s",
-        args.users, args.dogs, args.ticks, args.tick_minutes, args.interval, args.seed,
+        "参数: users=%d, dogs=%d, ticks=%d, tick_minutes=%d, interval=%.2f, seed=%s, api=%s",
+        args.users, args.dogs, args.ticks, args.tick_minutes,
+        args.interval, args.seed, args.api_url,
     )
 
     # 调用核心调度函数
@@ -397,6 +475,7 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
         output_dir=args.output_dir,
         num_users=args.users,
+        api_url=args.api_url,                        # ← 🆕 传入 Flask API 地址
     )
 
 

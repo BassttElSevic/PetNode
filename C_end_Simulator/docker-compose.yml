@@ -21,6 +21,24 @@
 # ──────────────────────────────────────────────────────────────
 
 services:
+  # ─────────── S端 Flask 数据服务器（必须先于 Engine 启动）───────────
+  flask-server:
+    build:
+      context: .                              # 构建上下文为 C_end_Simulator/ 目录
+      dockerfile: flask_server/Dockerfile     # 使用 flask_server 专属 Dockerfile
+    container_name: petnode-flask              # 容器名称
+    restart: unless-stopped                   # 崩溃时自动重启
+    ports:
+      - "5000:5000"                           # 宿主机 5000 → 容器 5000（方便调试）
+    environment:
+      - PYTHONUNBUFFERED=1                    # 禁用 Python 输出缓冲
+      - DATA_DIR=/app/data                    # FileStorage 数据目录
+      - PORT=5000                             # Flask 监听端口
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')" ]
+      interval: 10s                           # 每 10 秒检查一次
+      timeout: 5s                             # 超时 5 秒
+      retries: 3                              # 连续 3 次失败才标记为 unhealthy
   # ─────────── 核心引擎容器（后台常驻，持续生成数据）───────────
   engine:
     build:
@@ -37,6 +55,10 @@ services:
     # 默认参数：2 只狗，200 ticks，每 1 秒一轮，种子 42
     # 可在此处修改参数来调整模拟行为
     command: ["--dogs", "2", "--ticks", "200", "--interval", "1", "--seed", "42", "--output-dir", "/app/output_data"]
+      # ... 其他配置不变 ...
+    depends_on:
+      flask-server:
+        condition: service_healthy    # 等 Flask 健康检查通过后再启动 Engine
 
   # ─────────── TUI 终端监控界面容器（PetNodeOS）───────────
   # 使用 Docker profile 机制——默认不随 docker compose up 启动，
