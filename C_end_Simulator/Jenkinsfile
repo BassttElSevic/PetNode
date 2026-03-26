@@ -1,0 +1,125 @@
+// ──────────────────────────────────────────────────────────────
+// Jenkinsfile —— PetNode 持续集成/持续部署 (CI/CD) 流水线配置
+//
+// 什么是这个文件？
+//   这就是告诉 Jenkins "你该干啥"的剧本。
+//   Jenkins 读到这个文件后，会按 stages 里定义的步骤，从上到下依次执行。
+//
+// 触发方式：
+//   1. 自动触发：你 git push 到 GitHub → GitHub Webhook 通�� Jenkins → 自动执行
+//   2. 手动触发：打开 Jenkins 网页 → 点"立即构建"按钮
+//
+// 前提条件：
+//   - Jenkins 服务器上已安装 Docker 和 docker compose
+//   - Jenkins 容器有权限调用宿主机的 Docker（通过 docker.sock 挂载）
+//   - 服务器防火墙已开放 5000（Flask）和 8080（Jenkins）端口
+// ──────────────────────────────────────────────────────────────
+
+pipeline {
+    // agent any = 在任何可用的 Jenkins 节点上执行
+    // （你只有一台服务器，所以就是在 172.28.69.242 上跑）
+    agent any
+
+    // ── 环境变量（整个 Pipeline 都能用）──
+    environment {
+        // 项目子目录（docker-compose.yml 所在的目录）
+        PROJECT_DIR = "C_end_Simulator"
+    }
+
+    // ── 触发器 ──
+    triggers {
+        // GitHub Webhook 推送时自动触发构建
+        // 需要在 GitHub 仓库 Settings → Webhooks 里配置
+        githubPush()
+    }
+
+    // ── 流水线阶段（从上到下依次执行）──
+    stages {
+
+        // ══════════════════════════════════════════════
+        // Stage 1: 拉取最新代码
+        // ══════════════════════════════════════════════
+        stage('拉取代码') {
+            steps {
+                // checkout scm = Jenkins 自动从配置的 Git 仓库拉取最新代码
+                // 等价于 git pull，但 Jenkins 帮你管理了
+                checkout scm
+                echo "代码拉取完成，当前提交: ${env.GIT_COMMIT}"
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // Stage 2: 构建 Docker 镜像
+        // 等价于你手动执行 docker compose build
+        // ══════════════════════════════════════════════
+        stage('构建镜像') {
+            steps {
+                // dir() = 切换到指定目录下执行命令
+                // 因为 docker-compose.yml 在 C_end_Simulator/ 里
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        echo ">>> 构建 Flask 服务器镜像..."
+                        docker compose build flask-server
+
+                        echo ">>> 构建 Engine 引擎镜像..."
+                        docker compose build engine
+                    '''
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // Stage 3: 停止旧容器 + 启动新容器
+        // 这就是老师要求的"一键更新和重启"
+        // ══════════════════════════════════════════════
+        stage('部署更新') {
+            steps {
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        echo ">>> 停止旧容器..."
+                        docker compose down --remove-orphans || true
+
+                        echo ">>> 启动新容器（后台运行）..."
+                        docker compose up -d flask-server engine
+                    '''
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════
+        // Stage 4: 健康检查
+        // 自动验证 Flask 服务器是否正常启动
+        // ══════════════════════════════════════════════
+        stage('健康检查') {
+            steps {
+                sh '''
+                    echo ">>> 等待 Flask 服务器启动..."
+                    for i in $(seq 1 12); do
+                        if curl -sf http://localhost:5000/api/health > /dev/null 2>&1; then
+                            echo "Flask 健康检查通过！"
+                            curl -s http://localhost:5000/api/health
+                            exit 0
+                        fi
+                        echo "    等待中... ($i/12)"
+                        sleep 5
+                    done
+                    echo "Flask 健康检查超时！"
+                    exit 1
+                '''
+            }
+        }
+    }
+
+    // ── 构建结束后的操作（不管成功还是失败都会执行）──
+    post {
+        success {
+            echo '部署成功！'
+        }
+        failure {
+            echo '部署失败，打印容器日志排查...'
+            dir("${PROJECT_DIR}") {
+                sh 'docker compose logs --tail=50 || true'
+            }
+        }
+    }
+}
