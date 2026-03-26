@@ -1500,3 +1500,262 @@ command: ["--dogs", "5", "--ticks", "1000", "--interval", "0.5", "--seed", "123"
 docker run --rm -v ./output_data:/app/output_data petnode-engine \
     --dogs 5 --ticks 1000 --interval 0.5 --seed 123 --output-dir /app/output_data
 ```
+
+---
+
+## 七、数据传输接口完整清单
+
+本节汇总了系统中所有数据传输过程（API 接口、文件交换、控制指令）的参数详情。
+
+---
+
+### 7.1 HTTP API 接口
+
+#### 7.1.1 Engine → Flask：数据上报接口
+
+| 接口信息 | 值 |
+|---------|-----|
+| **URL** | `POST http://flask-server:5000/api/data` |
+| **传输频率** | 每 tick 每只狗 1 次（默认每秒 1 次 × 狗数量） |
+| **Content-Type** | `application/json` |
+
+**请求体参数（Request Body）**：
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|--------|------|:----:|------|--------|
+| `user_id` | `string` | ✅ | 用户唯一标识 | `"user_e3e073dd"` |
+| `device_id` | `string` | ✅ | 设备（狗）唯一标识 | `"109f156a015a"` |
+| `timestamp` | `string` | ✅ | ISO 8601 格式的模拟时间戳 | `"2025-06-01T00:01:00"` |
+| `behavior` | `string` | ✅ | 行为状态：sleeping/resting/walking/running | `"sleeping"` |
+| `heart_rate` | `float` | ✅ | 心率 (bpm)，范围 30~250 | `66.2` |
+| `resp_rate` | `float` | ✅ | 呼吸频率 (次/分钟)，范围 8~80 | `8.5` |
+| `temperature` | `float` | ✅ | 体温 (°C)，范围 36.0~42.0 | `38.45` |
+| `steps` | `int` | ✅ | 今日累计步数（跨天清零） | `0` |
+| `battery` | `int` | ✅ | 电量百分比（当前固定为 100） | `100` |
+| `gps_lat` | `float` | ✅ | GPS 纬度 | `29.57` |
+| `gps_lng` | `float` | ✅ | GPS 经度 | `106.45` |
+| `event` | `string\|null` | ✅ | 当前事件名称（无事件时为 null） | `null` 或 `"fever"` |
+| `event_phase` | `string\|null` | ✅ | 事件阶段：onset/peak/recovery（无事件时为 null） | `null` 或 `"peak"` |
+
+**响应体（Response Body）**：
+
+| 状态码 | 参数名 | 类型 | 说明 |
+|:------:|--------|------|------|
+| **200** | `status` | `string` | 固定值 `"ok"` |
+| | `message` | `string` | `"数据已保存"` |
+| **400** | `status` | `string` | 固定值 `"error"` |
+| | `message` | `string` | `"请求体必须是合法的 JSON 对象"` |
+| **500** | `status` | `string` | 固定值 `"error"` |
+| | `message` | `string` | 错误详情 |
+
+---
+
+#### 7.1.2 Flask 健康检查接口
+
+| 接口信息 | 值 |
+|---------|-----|
+| **URL** | `GET http://flask-server:5000/api/health` |
+| **传输频率** | 按需调用（健康检查 / 运维监控） |
+
+**响应体参数（Response Body）**：
+
+| 参数名 | 类型 | 说明 | 示例值 |
+|--------|------|------|--------|
+| `status` | `string` | 服务状态 | `"healthy"` |
+| `total_received` | `int` | 累计接收数据条数 | `1234` |
+| `timestamp` | `string` | 当前服务器时间 | `"2026-03-26 10:30:00"` |
+
+---
+
+### 7.2 文件交换接口
+
+系统组件之间通过共享目录 `output_data/` 进行文件级数据交换。
+
+#### 7.2.1 实时数据流文件（Engine → TUI/GUI）
+
+| 文件信息 | 值 |
+|---------|-----|
+| **文件路径** | `output_data/realtime_stream.jsonl` |
+| **格式** | JSON Lines（每行一条 JSON 记录） |
+| **写入方** | Engine (FileExporter) |
+| **读取方** | TUI (DataAPI) / GUI |
+| **更新频率** | 每 tick 追加写入（默认每秒 × 狗数量） |
+| **滚动策略** | 每 100 ticks 截断，保留最新 500 行 |
+
+**每行记录参数**（与 HTTP API 请求体相同）：
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| `user_id` | `string` | 用户唯一标识 |
+| `device_id` | `string` | 设备（狗）唯一标识 |
+| `timestamp` | `string` | ISO 8601 格式时间戳 |
+| `behavior` | `string` | 行为状态 |
+| `heart_rate` | `float` | 心率 (bpm) |
+| `resp_rate` | `float` | 呼吸频率 |
+| `temperature` | `float` | 体温 (°C) |
+| `steps` | `int` | 今日累计步数 |
+| `battery` | `int` | 电量百分比 |
+| `gps_lat` | `float` | GPS 纬度 |
+| `gps_lng` | `float` | GPS 经度 |
+| `event` | `string\|null` | 当前事件名称 |
+| `event_phase` | `string\|null` | 事件阶段 |
+
+---
+
+#### 7.2.2 引擎状态文件（Engine → TUI/GUI）
+
+| 文件信息 | 值 |
+|---------|-----|
+| **文件路径** | `output_data/engine_status.json` |
+| **格式** | JSON |
+| **写入方** | Engine (main.py) |
+| **读取方** | TUI (DataAPI) / GUI |
+| **更新频率** | 每 50 ticks 或引擎状态变化时 |
+
+**文件参数**：
+
+| 参数名 | 类型 | 说明 | 示例值 |
+|--------|------|------|--------|
+| `running` | `bool` | 引擎是否正在运行 | `true` |
+| `num_users` | `int` | 用户数量 | `1` |
+| `num_dogs` | `int` | 狗的数量 | `2` |
+| `total_ticks` | `int` | 总 tick 数 | `200` |
+| `tick_minutes` | `int` | 每 tick 对应的模拟分钟数 | `1` |
+| `current_tick` | `int` | 当前已完成的 tick 数 | `50` |
+
+---
+
+#### 7.2.3 控制指令文件（TUI/GUI → Engine）
+
+| 文件信息 | 值 |
+|---------|-----|
+| **文件路径** | `output_data/command.json` |
+| **格式** | JSON |
+| **写入方** | TUI (CommandAPI) / GUI |
+| **读取方** | Engine (main.py 轮询) |
+| **更新频率** | 用户操作时写入，Engine 每 tick 轮询读取 |
+| **模式** | 最后写入有效（非队列） |
+
+**支持的指令格式**：
+
+| 指令类型 | 参数名 | 类型 | 必填 | 说明 | JSON 示例 |
+|----------|--------|------|:----:|------|-----------|
+| **停止** | `action` | `string` | ✅ | 固定值 `"stop"` | `{"action": "stop"}` |
+| **暂停** | `action` | `string` | ✅ | 固定值 `"pause"` | `{"action": "pause"}` |
+| **恢复** | `action` | `string` | ✅ | 固定值 `"resume"` | `{"action": "resume"}` |
+| **调整间隔** | `action` | `string` | ✅ | 固定值 `"set_interval"` | `{"action": "set_interval", "value": 2.0}` |
+| | `value` | `float` | ✅ | 新的 tick 间隔（秒），≥ 0 | |
+
+---
+
+#### 7.2.4 离线缓存文件（Engine 断网时）
+
+| 文件信息 | 值 |
+|---------|-----|
+| **目录路径** | `output_data/offline_cache/` |
+| **格式** | JSON Lines（每个缓存文件） |
+| **写入方** | Engine (HttpExporter，断网时) |
+| **读取方** | Engine (HttpExporter，恢复后补发) |
+| **更新频率** | 仅在 Flask 服务器不可达时写入 |
+
+**缓存文件记录参数**：与实时数据流文件相同（13 个字段）
+
+---
+
+### 7.3 TUI 后端 API 接口
+
+TUI 后端为前端界面提供的内部 API（Python 方法调用，非 HTTP）。
+
+#### 7.3.1 DataAPI —— 数据读取接口
+
+| 方法签名 | 返回类型 | 读取文件 | 调用频率 |
+|----------|----------|----------|----------|
+| `get_engine_status()` | `dict \| None` | `engine_status.json` | TUI 每 2 秒自动刷新 |
+| `get_latest_records(n=20)` | `list[dict]` | `realtime_stream.jsonl` | TUI 每 2 秒自动刷新 |
+| `get_records_by_user(user_id, n=50)` | `list[dict]` | `realtime_stream.jsonl` | 按需调用 |
+| `get_records_by_device(device_id, n=20)` | `list[dict]` | `realtime_stream.jsonl` | 按需调用 |
+| `get_total_record_count()` | `int` | `realtime_stream.jsonl` | 按需调用 |
+| `get_unique_devices()` | `list[str]` | `realtime_stream.jsonl` | 按需调用 |
+
+**`get_latest_records()` 返回的记录参数**：同 7.2.1 表格
+
+---
+
+#### 7.3.2 CommandAPI —— 指令发送接口
+
+| 方法签名 | 写入文件 | 调用频率 |
+|----------|----------|----------|
+| `send_stop()` | `command.json` | 用户点击"停止"按钮 |
+| `send_pause()` | `command.json` | 用户点击"暂停"按钮 |
+| `send_resume()` | `command.json` | 用户点击"恢复"按钮 |
+| `send_set_interval(interval: float)` | `command.json` | 用户调整 tick 间隔 |
+| `clear_command()` | `command.json` | 清空指令（可选） |
+| `get_current_command()` | 读取 `command.json` | 按需调用 |
+
+**方法参数详情**：
+
+| 方法 | 参数名 | 类型 | 必填 | 说明 |
+|------|--------|------|:----:|------|
+| `send_set_interval` | `interval` | `float` | ✅ | tick 间隔（秒），必须 ≥ 0 |
+
+---
+
+#### 7.3.3 UserStore —— 用户管理接口
+
+| 方法签名 | 返回类型 | 调用频率 |
+|----------|----------|----------|
+| `login(username, num_dogs)` | `str` (user_id) | 用户登录时 |
+| `logout()` | `None` | 用户登出时 |
+| `get_user_info()` | `dict \| None` | 按需调用 |
+
+**方法参数详情**：
+
+| 方法 | 参数名 | 类型 | 必填 | 说明 |
+|------|--------|------|:----:|------|
+| `login` | `username` | `string` | ✅ | 用户名（非空字符串） |
+| | `num_dogs` | `int` | ✅ | 狗数量（1~10），决定引擎线程数 |
+
+**`get_user_info()` 返回参数**：
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| `user_id` | `string` | 用户唯一标识（`user_<8 hex chars>`） |
+| `username` | `string` | 用户名 |
+| `num_dogs` | `int` | 狗数量 |
+| `logged_in` | `bool` | 是否已登录 |
+
+---
+
+### 7.4 数据传输频率汇总表
+
+| 传输通道 | 发送方 | 接收方 | 数据类型 | 默认频率 | 备注 |
+|----------|--------|--------|----------|----------|------|
+| HTTP POST `/api/data` | Engine | Flask | 项圈记录 | 每 tick × 狗数量 | 主通道，永久保存 |
+| HTTP GET `/api/health` | 运维/监控 | Flask | 健康状态 | 按需 | 健康检查 |
+| 文件 `realtime_stream.jsonl` | Engine | TUI/GUI | 项圈记录 | 每 tick × 狗数量 | TUI 缓冲，滚动截断 |
+| 文件 `engine_status.json` | Engine | TUI/GUI | 引擎状态 | 每 50 ticks | 状态同步 |
+| 文件 `command.json` | TUI/GUI | Engine | 控制指令 | 用户操作时 | 引擎每 tick 轮询 |
+| 文件 `offline_cache/*.jsonl` | Engine | Engine | 项圈记录 | 断网时 | 恢复后自动补发 |
+
+---
+
+### 7.5 完整数据记录字段速查表
+
+以下是系统中核心数据记录（SmartCollar 生成）的 **13 个字段**完整定义：
+
+| # | 字段名 | 类型 | 范围/格式 | 说明 | 生成逻辑 |
+|:-:|--------|------|-----------|------|----------|
+| 1 | `user_id` | `string` | `user_<8 hex>` | 用户唯一标识 | 登录时由 SHA-256 哈希生成 |
+| 2 | `device_id` | `string` | `<12 hex>` | 设备（狗）唯一标识 | 项圈创建时随机生成 |
+| 3 | `timestamp` | `string` | ISO 8601 | 模拟时间戳 | 每 tick 递增 tick_minutes 分钟 |
+| 4 | `behavior` | `string` | sleeping/resting/walking/running | 当前行为状态 | 马尔可夫状态机转移 |
+| 5 | `heart_rate` | `float` | 30.0 ~ 250.0 | 心率 (bpm) | 行为基准 + Trait偏移 + drift + Event |
+| 6 | `resp_rate` | `float` | 8.0 ~ 80.0 | 呼吸频率 (次/分) | 行为基准 + Trait偏移 + drift + Event |
+| 7 | `temperature` | `float` | 36.0 ~ 42.0 | 体温 (°C) | 行为基准 + Trait偏移 + Event |
+| 8 | `steps` | `int` | ≥ 0 | 今日累计步数 | 日内单调递增，跨天清零 |
+| 9 | `battery` | `int` | 100 | 电量百分比 | 当前固定为 100 |
+| 10 | `gps_lat` | `float` | 6 位小数 | GPS 纬度 | 上一位置 + 行为位移 |
+| 11 | `gps_lng` | `float` | 6 位小数 | GPS 经度 | 上一位置 + 行为位移 |
+| 12 | `event` | `string\|null` | fever/injury/null | 当前事件名称 | EventManager 按天触发 |
+| 13 | `event_phase` | `string\|null` | onset/peak/recovery/null | 事件阶段 | 事件内部状态机 |
+
