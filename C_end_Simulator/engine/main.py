@@ -198,7 +198,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
       --interval      每轮 tick 之间的真实等待秒数（默认 0，即尽快跑完）
       --seed          随机种子（用于可复现模拟）
       --output-dir    输出目录（默认 output_data/）
-      --api-url       Flask 服务器 API 地址（默认 http://flask-server:5000/api/data）
+      --api-url       Flask 服务器 API 地址（默认 http://pppetnode.com:5000/api/data ）
       --log-level     日志级别（默认 INFO）
     """
     parser = argparse.ArgumentParser(
@@ -236,8 +236,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--api-url", type=str,
         # default="http://172.28.69.242:5000/api/data",
         default = "http://pppetnode.com:5000/api/data",
-        help="Flask 服务器 API 地址（默认 http://172.28.69.242:5000/api/data）",
-    )
+        help="Flask 服务器 API 地址（默认 http://47.109.200.132:5000/api/data）",
+    ) # 47.109.200.132
     parser.add_argument(
         "--log-level", type=str, default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
