@@ -137,7 +137,7 @@ def receive_data():
     # ── 第 1 步：解析请求体中的 JSON 数据 ──
     # request.get_json() 会自动解析 Content-Type: application/json 的请求体
     # silent=True 表示解析失败时返回 None 而不是抛异常
-    record = request.get_json(silent=True)
+    record = request.get_json(force=True, silent=True)
 
     # ── 第 2 步：校验数据是否合法 ──
     # 如果请求体不是合法的 JSON，或者不是字典类型，返回 400 错误
