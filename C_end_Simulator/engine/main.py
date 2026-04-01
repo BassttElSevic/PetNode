@@ -234,9 +234,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-url", type=str,
-        # default="http://172.28.69.242:5000/api/data",
-        default = "http://pppetnode.com:5000/api/data",
-        help="Flask 服务器 API 地址（默认 http://47.109.200.132:5000/api/data）",
+        default=os.environ.get("API_URL", "http://flask-server:5000/api/data"),
+        help="Flask 服务器 API 地址（优先读环境变量 API_URL）",
     ) # 47.109.200.132
     parser.add_argument(
         "--log-level", type=str, default="INFO",
@@ -258,7 +257,7 @@ def run(
     output_dir: str | Path | None = None,
     num_users: int = 1,
     # api_url: str = "http://172.28.69.242:5000/api/data",
-    api_url: str = "http://pppetnode.com:5000/api/data",
+    api_url: str = os.environ.get("API_URL", "http://flask-server:5000/api/data"),
 ) -> list[dict]:
     """
     运行模拟引擎主循环（支持多线程并行生成数据）。

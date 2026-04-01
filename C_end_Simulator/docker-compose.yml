@@ -52,7 +52,7 @@ services:
       - ./output_data:/app/output_data
     environment:
       - PYTHONUNBUFFERED=1              # 禁用 Python 输出缓冲（确保日志实时输出）
-      - API_URL=http://pppetnode.com:5000/api/data
+      - API_URL=http://flask-server:5000/api/data
     # 默认参数：2 只狗，200 ticks，每 1 秒一轮，种子 42
     # 可在此处修改参数来调整模拟行为
     command: ["--dogs", "2", "--ticks", "200", "--interval", "1", "--seed", "42", "--output-dir", "/app/output_data"]
