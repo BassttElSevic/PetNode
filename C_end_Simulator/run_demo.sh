@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# 0. 创建共享 Docker 网络
+# 0. 清理上次运行可能残留的容器和网络
+echo "🧹 清理可能残留的旧容器..."
+docker rm -f demo_engine_1 demo_engine_2 demo_engine_3 demo_flask_cloud > /dev/null 2>&1
+docker network rm petnode-net > /dev/null 2>&1
+
+# 1. 创建共享 Docker 网络
 docker network create petnode-net 2>/dev/null || true
 
-# 1. 构建镜像
+# 2. 构建镜像
 echo "🔨 正在构建 Docker 镜像..."
 docker build -f flask_server/Dockerfile -t petnode-flask:latest .
 docker build -f engine/Dockerfile -t petnode-engine:latest .
