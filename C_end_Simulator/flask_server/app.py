@@ -95,6 +95,7 @@ logger = logging.getLogger("flask_server")
 
 # 创建 Flask 应用实例（__name__ 让 Flask 知道当前模块的位置）
 app = Flask(__name__)
+app.config['TRUSTED_HOSTS'] = ['*']
 
 # ────────────────── 初始化存储层 ──────────────────
 
