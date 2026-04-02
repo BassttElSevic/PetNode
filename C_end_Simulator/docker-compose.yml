@@ -21,6 +21,22 @@
 # ──────────────────────────────────────────────────────────────
 
 services:
+  # ─────────── nginx 反向代理（SSL 终结层，443 端口）───────────
+  # 架构: Engine ──HTTPS(:443)──→ nginx ──HTTP(:5000)──→ Flask
+  # nginx 负责 SSL 加解密，Flask 继续用 HTTP，代码零修改
+  nginx:
+    build:
+      context: .                              # 构建上下文为 C_end_Simulator/ 目录
+      dockerfile: nginx/Dockerfile            # 使用 nginx 专属 Dockerfile
+    container_name: petnode-nginx             # 容器名称
+    restart: unless-stopped                   # 崩溃时自动重启
+    ports:
+      - "443:443"                             # HTTPS 端口（外部访问走这里）
+      - "80:80"                               # HTTP 端口（自动重定向到 HTTPS）
+    depends_on:
+      flask-server:
+        condition: service_healthy            # 等 Flask 健康检查通过后再启动
+
   # ─────────── S端 Flask 数据服务器（必须先于 Engine 启动）───────────
   flask-server:
     build:
