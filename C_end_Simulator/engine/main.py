@@ -246,6 +246,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="HMAC 密钥，用于请求体防篡改签名（优先读环境变量 HMAC_KEY）",
     )
     parser.add_argument(
+        "--no-verify-ssl", action="store_true", default=False,
+        help="禁用 SSL 证书验证（使用自签名证书时需要此选项，默认开启验证）",
+    )
+    parser.add_argument(
         "--log-level", type=str, default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="日志级别（默认 INFO）",
@@ -268,6 +272,7 @@ def run(
     api_url: str = os.environ.get("API_URL", "http://flask-server:5000/api/data"),
     api_key: str | None = None,
     hmac_key: str | None = None,
+    verify_ssl: bool = True,  # 是否验证 SSL 证书（使用自签名证书时需设为 False）
 ) -> list[dict]:
     """
     运行模拟引擎主循环（支持多线程并行生成数据）。
@@ -331,7 +336,7 @@ def run(
 
     # 主通道：HttpExporter — 将数据 POST 到 Flask 服务器（永久保存）
     # 断网时自动缓存到 offline_cache/，恢复后自动补发
-    http_exporter = HttpExporter(api_url=api_url, api_key=api_key, hmac_key=hmac_key)
+    http_exporter = HttpExporter(api_url=api_url, api_key=api_key, hmac_key=hmac_key, verify_ssl=verify_ssl)
     logger.info("HttpExporter 已就绪 (主通道): %s", http_exporter.api_url)
 
     # TUI 缓冲：FileExporter — 写本地文件给 TUI 实时读取（滚动截断，不永久保存）
@@ -521,6 +526,7 @@ def main(argv: list[str] | None = None) -> None:
         api_url=args.api_url,                        # ← 🆕 传入 Flask API 地址
         api_key=args.api_key,                        # ← 🆕 传入 API Key
         hmac_key=args.hmac_key,                      # ← 🆕 传入 HMAC 密钥
+        verify_ssl=not args.no_verify_ssl,            # ← 🆕 SSL 证书验证（--no-verify-ssl 禁用）
     )
 
 

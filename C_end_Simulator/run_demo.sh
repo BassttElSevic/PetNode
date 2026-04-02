@@ -2,7 +2,7 @@
 
 # 0. 清理上次运行可能残留的容器和网络
 echo "🧹 清理可能残留的旧容器..."
-docker rm -f demo_engine_1 demo_engine_2 demo_engine_3 demo_flask_cloud > /dev/null 2>&1
+docker rm -f demo_engine_1 demo_engine_2 demo_engine_3 demo_flask_cloud demo_nginx > /dev/null 2>&1
 docker network rm petnode-net > /dev/null 2>&1
 
 # 1. 创建共享 Docker 网络
@@ -12,6 +12,7 @@ docker network create petnode-net 2>/dev/null || true
 echo "🔨 正在构建 Docker 镜像..."
 docker build --no-cache -f flask_server/Dockerfile -t petnode-flask:latest .
 docker build -f engine/Dockerfile -t petnode-engine:latest .
+docker build -f nginx/Dockerfile -t petnode-nginx:latest .
 
 # 2. 清理旧数据
 echo "🧹 正在清理旧数据..."
@@ -41,6 +42,25 @@ else
     echo "❌ Flask 服务器启动失败"
     docker rm -f demo_flask_cloud > /dev/null
     exit 1
+fi
+
+# 3.5 启动 nginx 容器（SSL 终结层，HTTPS:443 → HTTP:5000）
+echo "🔒 正在启动 nginx HTTPS 反向代理..."
+docker rm -f demo_nginx > /dev/null 2>&1
+docker run -d \
+    --name demo_nginx \
+    --network petnode-net \
+    -p 443:443 \
+    -p 80:80 \
+    petnode-nginx:latest
+
+echo "⏳ 等待 nginx 启动..."
+sleep 3
+
+if curl -sk https://localhost:443/api/health > /dev/null 2>&1; then
+    echo "✅ nginx HTTPS 代理已就绪（https://localhost:443）"
+else
+    echo "⚠️  nginx 可能还在启动中，继续..."
 fi
 
 # 4. 启动 3 个 Engine 容器（走 Docker 内部网络）
@@ -86,7 +106,7 @@ echo "Flask 云端接收情况："
 curl -s http://localhost:5000/api/health | python3 -m json.tool 2>/dev/null || echo "无法连接 Flask 服务器"
 
 echo -e "\n\033[0;31m=== 🧹 演示结束，开始清理环境 ===\033[0m"
-docker rm -f demo_engine_1 demo_engine_2 demo_engine_3 demo_flask_cloud > /dev/null 2>&1
+docker rm -f demo_engine_1 demo_engine_2 demo_engine_3 demo_flask_cloud demo_nginx > /dev/null 2>&1
 docker network rm petnode-net > /dev/null 2>&1
 rm -rf output_data/*
 docker image prune -f > /dev/null 2>&1
