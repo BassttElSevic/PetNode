@@ -70,16 +70,23 @@ from datetime import datetime  # 获取当前时间（用于日志）
 
 from flask import Flask, request, jsonify  # Flask 核心：应用、请求对象、JSON 响应
 
-# 从 storage 子模块导入当前阶段的存储实现（文件存储）
-# 未来切换 MySQL 时，只需要改这一行 import
-# from storage.file_storage import FileStorage
+# 存储层采用策略模式：app.py 只依赖 BaseStorage.save()/close()。
+#
+# 本周任务：默认改为 MongoDB（MongoStorage）。
+# 兼容性：仍保留 FileStorage 作为降级/本地无 Mongo 环境的选项。
+#
+# 通过环境变量 STORAGE_BACKEND 控制：
+#   - STORAGE_BACKEND=mongo  (默认) → MongoStorage
+#   - STORAGE_BACKEND=file            → FileStorage
 
 # Robust import: prefer absolute package import (helps static analysis and tools),
 # fall back to relative import when running the module as a script.
 try:
     from flask_server.storage.file_storage import FileStorage
+    from flask_server.storage.mongo_storage import MongoStorage
 except Exception:
     from .storage.file_storage import FileStorage
+    from .storage.mongo_storage import MongoStorage
 
 # ────────────────── 日志配置 ──────────────────
 
@@ -100,16 +107,26 @@ app = Flask(__name__)
 
 # ────────────────── 初始化存储层 ──────────────────
 
-# 从环境变量读取数据存储目录，默认为容器内的 /app/data
-# 通过环境变量配置，让 Dockerfile 和 docker-compose 可以灵活指定路径
+# ── 存储后端选择 ──
+# 默认使用 MongoDB；如果你在本地没有启动 MongoDB，可以临时：
+#   set STORAGE_BACKEND=file
+_STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "mongo").strip().lower()
+
+# FileStorage 的数据目录（仅在 STORAGE_BACKEND=file 时使用）
 _DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 
-# 创建存储实例（当前阶段：FileStorage 写文件）
-# 未来切换 MySQL 时：改成 MysqlStorage(host=..., db=...) 即可
-storage = FileStorage(data_dir=_DATA_DIR)
-
-# 记录启动日志
-logger.info("Flask 数据服务器已初始化，存储目录: %s", _DATA_DIR)
+if _STORAGE_BACKEND == "file":
+    storage = FileStorage(data_dir=_DATA_DIR)
+    logger.info("Flask 数据服务器已初始化：FileStorage, 目录=%s", _DATA_DIR)
+else:
+    # MongoStorage 的配置由环境变量提供：MONGO_URI / MONGO_DB / MONGO_COLLECTION
+    storage = MongoStorage()
+    logger.info(
+        "Flask 数据服务器已初始化：MongoStorage, uri=%s, db=%s, collection=%s",
+        os.environ.get("MONGO_URI", "mongodb://mongodb:27017"),
+        os.environ.get("MONGO_DB", "petnode"),
+        os.environ.get("MONGO_COLLECTION", "received_records"),
+    )
 
 # ────────────────── 统计计数器 ──────────────────
 

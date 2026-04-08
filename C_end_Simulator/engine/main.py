@@ -1,26 +1,33 @@
-"""
-engine/main.py —— 核心调度器
+"""engine/main.py —— 核心调度器
 
 职责：
-  - 解析命令行参数（用户数量、狗数量、Tick 数、间隔、种子等）
-  - 创建 SmartCollar 实例 + HttpExporter(主通道) + FileExporter(TUI缓冲) + DummyListener
-  - 主循环：每隔 real_interval 秒调用项圈生成数据 → 发到 Flask + 写缓冲文件
-  - 支持多线程：每个 tick 内，使用线程池并行为每只狗生成数据
-  - 轮询 command.json 读取控制指令（stop/pause/resume/set_interval）
-  - 优雅退出：Ctrl-C / SIGTERM
+- 解析命令行参数（用户数量、狗数量、Tick 数、间隔、种子等）
+- 创建 SmartCollar 实例 + 主通道 Exporter + FileExporter(TUI 缓冲) + DummyListener
+- 主循环：每个 tick 生成数据 → 走“主通道”上报/入队 → 写本地缓冲文件
+- 支持多线程：每个 tick 内，使用线程池并行生成每只狗的数据
+- 轮询 command.json 读取控制指令（stop/pause/resume/set_interval）
+- 优雅退出：Ctrl-C / SIGTERM
 
-数据流向：
-  record → HttpExporter → 云服务器上的 Flask
-                │
-                └── 断网 → offline_cache/（自动补发后删除）
-  record → FileExporter → realtime_stream.jsonl（TUI 缓冲，滚动截断，最多 500 行）
-地址: http://<你的服务器IP>:5000/api/data
+主通道（可切换）：
+- http：HttpExporter → HTTP POST 到 Flask /api/data（由 Flask 负责鉴权/验签与入库）
+- mq ：MqExporter   → RabbitMQ queue（由 mq-worker 消费：鉴权/验签 → MongoStorage 入库）
+
+数据流向（概览）：
+    record
+        ├─ 主通道：HttpExporter 或 MqExporter
+        │     └─ 失败（断网/不可达）→ output_data/offline_cache/（flush() 自动补发后删除）
+        └─ TUI 缓冲：FileExporter → realtime_stream.jsonl（滚动截断，最多 500 行）
 
 用法::
 
-    python -m engine.main                                  # 默认 1 用户 1 只狗, 100 ticks
-    python -m engine.main --users 2 --dogs 6 --ticks 500   # 2 用户 6 只狗, 500 ticks
-    python -m engine.main --seed 42 --interval 2           # 可复现, 每 2 秒一轮
+        # 1) 默认走 HTTP
+        python -m engine.main
+
+        # 2) 显式选择走 MQ
+        python -m engine.main --export-backend mq
+
+        # 3) 通过环境变量选择
+        EXPORT_BACKEND=mq python -m engine.main
 """
 #
 # ┌─ 你的服务器 47.109.200.132（pppetnode.com）─────────────────────┐
@@ -64,7 +71,7 @@ from typing import Optional
 import os
 
 from engine.models import DogProfile, SmartCollar
-from engine.exporters import FileExporter, HttpExporter              # ← 🆕 加上 HttpExporter
+from engine.exporters import FileExporter, HttpExporter, MqExporter
 from engine.listeners import DummyListener
 
 # ────────────────── 日志 ──────────────────
@@ -236,6 +243,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Flask 服务器 API 地址（优先读环境变量 API_URL）",
     ) # 47.109.200.132
     parser.add_argument(
+        "--export-backend", type=str,
+        default=os.environ.get("EXPORT_BACKEND", "http"),
+        choices=["http", "mq"],
+        help=(
+            "主通道导出后端：http 或 mq（优先读环境变量 EXPORT_BACKEND；默认 http）。"
+            "mq 表示发送到 RabbitMQ，由 mq-worker 消费并入库。"
+        ),
+    )
+    parser.add_argument(
         "--api-key", type=str,
         default=os.environ.get("API_KEY", "petnode_secret_key_2026"),
         help="API Key，用于 Flask 服务器鉴权（优先读环境变量 API_KEY）",
@@ -268,6 +284,7 @@ def run(
     api_url: str = os.environ.get("API_URL", "http://flask-server:5000/api/data"),
     api_key: str | None = None,
     hmac_key: str | None = None,
+    export_backend: str | None = None,
 ) -> list[dict]:
     """
     运行模拟引擎主循环（支持多线程并行生成数据）。
@@ -294,6 +311,10 @@ def run(
         API Key，用于 Flask 服务器鉴权（None 时自动从环境变量 API_KEY 读取）
     hmac_key : str | None
         HMAC 密钥，用于请求体防篡改签名（None 时自动从环境变量 HMAC_KEY 读取）
+    export_backend : str | None
+        主通道导出后端："http" 或 "mq"。
+        - http: 使用 HttpExporter 直接 POST 到 Flask /api/data
+        - mq  : 使用 MqExporter 发布到 RabbitMQ 队列，由 mq-worker 消费写库
 
     Returns
     -------
@@ -329,10 +350,19 @@ def run(
 
     # ── 创建 exporters（数据导出器）──
 
-    # 主通道：HttpExporter — 将数据 POST 到 Flask 服务器（永久保存）
-    # 断网时自动缓存到 offline_cache/，恢复后自动补发
-    http_exporter = HttpExporter(api_url=api_url, api_key=api_key, hmac_key=hmac_key)
-    logger.info("HttpExporter 已就绪 (主通道): %s", http_exporter.api_url)
+    # 主通道：根据 export_backend 选择 HTTP 或 MQ。
+    #
+    # 选择建议：
+    # - 需要“解耦 + 队列重投递 + worker 异步入库”时用 mq
+    # - 需要“最少组件、直接打 API”时用 http
+    chosen_backend = (export_backend or os.environ.get("EXPORT_BACKEND", "http")).strip().lower()
+
+    if chosen_backend == "mq":
+        main_exporter = MqExporter(api_key=api_key, hmac_key=hmac_key)
+        logger.info("MqExporter 已就绪 (主通道): queue=%s", main_exporter.queue_name)
+    else:
+        main_exporter = HttpExporter(api_url=api_url, api_key=api_key, hmac_key=hmac_key)
+        logger.info("HttpExporter 已就绪 (主通道): %s", main_exporter.api_url)
 
     # TUI 缓冲：FileExporter — 写本地文件给 TUI 实时读取（滚动截断，不永久保存）
     file_exporter = FileExporter(output_dir=out_path)
@@ -420,15 +450,15 @@ def run(
                 # 收集各线程生成的记录（as_completed 在主线程中顺序回收结果）
                 for future in as_completed(futures):
                     record = future.result()
-                    # 主通道：POST 到 Flask（失败则自动缓存到 offline_cache/）
-                    http_exporter.export(record)
+                    # 主通道：HTTP 或 MQ（失败则自动缓存到 offline_cache/）
+                    main_exporter.export(record)
                     # TUI 缓冲：写本地文件（给 TUI 实时读取显示）
                     file_exporter.export(record)
                     all_records.append(record)
 
                 # 定期 flush（每 10 ticks 或最后一个 tick）
                 if (tick + 1) % 10 == 0 or tick == num_ticks - 1:
-                    http_exporter.flush()            # 补发离线缓存（如果有的话）
+                    main_exporter.flush()            # 补发离线缓存（如果有的话）
                     file_exporter.flush()            # TUI 缓冲刷盘
 
                 # 定期截断 TUI 缓冲文件（每 100 ticks），防止无限膨胀
@@ -459,8 +489,8 @@ def run(
 
     finally:
         # ── 清理：无论正常结束还是异常退出，都确保资源被释放 ──
-        http_exporter.flush()                        # 最后一次补发离线缓存
-        http_exporter.close()                        # 关闭 HTTP Session
+        main_exporter.flush()                        # 最后一次补发离线缓存
+        main_exporter.close()                        # 关闭连接/资源
         file_exporter.flush()                        # TUI 缓冲刷盘
         file_exporter.close()                        # 关闭文件句柄
         listener.close()
@@ -474,8 +504,8 @@ def run(
             "current_tick": len(all_records) // max(num_dogs, 1),
         })
         logger.info(
-            "引擎已停止。共生成 %d 条记录, HTTP 发送=%s, TUI 缓冲=%s",
-            len(all_records), http_exporter, file_exporter.filepath,
+            "引擎已停止。共生成 %d 条记录, 主通道发送=%s, TUI 缓冲=%s",
+            len(all_records), main_exporter, file_exporter.filepath,
         )
 
     return all_records
@@ -521,6 +551,7 @@ def main(argv: list[str] | None = None) -> None:
         api_url=args.api_url,                        # ← 🆕 传入 Flask API 地址
         api_key=args.api_key,                        # ← 🆕 传入 API Key
         hmac_key=args.hmac_key,                      # ← 🆕 传入 HMAC 密钥
+        export_backend=args.export_backend,
     )
 
 
