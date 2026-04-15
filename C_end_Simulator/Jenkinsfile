@@ -80,7 +80,7 @@ pipeline {
                         docker compose down --remove-orphans || true
 
                         echo ">>> 启动新容器（后台运行）..."
-                        docker compose up -d flask-server engine
+                        docker compose up -d rabbitmq mongodb mq-worker flask-server engine
                     '''
                 }
             }
