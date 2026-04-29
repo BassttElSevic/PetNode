@@ -646,11 +646,10 @@ flowchart TD
 
 ### 输出 record 的字段说明
 
-每条模拟数据记录包含以下 13 个字段：
+每条模拟数据记录包含以下 12 个字段（**不包含 `user_id`，Engine 只上报 `device_id`**）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `user_id` | `str` | 所属用户唯一标识 |
 | `device_id` | `str` | 设备（狗）唯一标识 |
 | `timestamp` | `str` | 模拟时间戳（ISO 8601 格式） |
 | `behavior` | `str` | 当前行为状态（sleeping / resting / walking / running） |
@@ -726,10 +725,11 @@ flowchart LR
 |------|------|--------|------|
 | `get_engine_status()` | — | `dict \| None` | 读取 `engine_status.json`，返回引擎运行状态 |
 | `get_latest_records(n)` | `n: int = 20` | `list[dict]` | 读取最新 n 条数据记录（时间倒序） |
-| `get_records_by_user(user_id, n)` | `user_id: str, n: int = 50` | `list[dict]` | 按用户 ID 筛选记录 |
 | `get_records_by_device(device_id, n)` | `device_id: str, n: int = 20` | `list[dict]` | 按设备 ID 筛选记录 |
 | `get_total_record_count()` | — | `int` | 获取记录总数 |
 | `get_unique_devices()` | — | `list[str]` | 获取所有唯一设备 ID |
+
+> 说明：由于 Engine record 不含 `user_id`，设备级查询是当前唯一稳定的数据筛选方式。
 
 **使用示例**：
 
@@ -788,7 +788,7 @@ cmd.send_stop()               # 停止引擎
 
 **位置**：`ui_tui/backend/user_store.py`
 
-负责用户登录和会话管理。用户登录时需提供用户名和狗数量，系统生成确定性的 `user_id`。
+负责用户登录和会话管理。用户登录时需提供用户名和狗数量，系统生成确定性的 `user_id`。**该 `user_id` 属于本地会话语义，不会写入 Engine 上报 record。**
 
 | 方法/属性 | 参数 | 返回值 | 说明 |
 |-----------|------|--------|------|
@@ -901,7 +901,7 @@ TUI/GUI ─写入──→ command.json          ──轮询──→ Engine（
 这是引擎的"大脑"，负责串联所有组件并驱动主循环。
 
 **功能**：
-- 解析命令行参数（用户数、狗数、tick 数、间隔、种子等）
+- 解析命令行参数（设备分组数、狗数、tick 数、间隔、种子等）
 - 创建 SmartCollar（项圈）实例，每只狗对应一个
 - 创建 FileExporter（数据导出器）和 DummyListener（指令监听器）
 - 运行主循环：每轮 tick → 轮询指令 → 多线程生成数据 → 导出到文件
@@ -911,7 +911,7 @@ TUI/GUI ─写入──→ command.json          ──轮询──→ Engine（
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--users` | 1 | 用户数量（一个用户可拥有多条狗） |
+| `--groups` | 1 | 设备分组数量（仅用于运行元数据；兼容旧参数 `--users`） |
 | `--dogs` | 1 | 模拟的狗数量 |
 | `--ticks` | 100 | 每只狗生成的 tick 总数 |
 | `--tick-minutes` | 1 | 每个 tick 对应的模拟时间（分钟） |
@@ -923,11 +923,11 @@ TUI/GUI ─写入──→ command.json          ──轮询──→ Engine（
 **使用示例**：
 
 ```bash
-# 默认运行（1 用户 1 只狗，100 ticks，尽快跑完）
+# 默认运行（1 分组 1 只狗，100 ticks，尽快跑完）
 python -m engine.main
 
-# 2 用户 6 只狗，500 ticks，每 1 秒一轮，种子 42
-python -m engine.main --users 2 --dogs 6 --ticks 500 --interval 1 --seed 42
+# 2 分组 6 只狗，500 ticks，每 1 秒一轮，种子 42
+python -m engine.main --groups 2 --dogs 6 --ticks 500 --interval 1 --seed 42
 
 # 调试模式，详细日志
 python -m engine.main --log-level DEBUG --dogs 2 --ticks 50
@@ -939,7 +939,6 @@ python -m engine.main --log-level DEBUG --dogs 2 --ticks 50
 
 `DogProfile` 是每只狗的"身份证"数据类，包含：
 - `dog_id`：唯一标识（12 位十六进制）
-- `user_id`：所属用户标识
 - `breed_size`：体型（small / medium / large）
 - `age_stage`：年龄阶段（puppy / adult / senior）
 - `traits`：慢性体质特质列表（0~2 个）
@@ -1363,14 +1362,14 @@ chmod +x scripts/docker_build_test.sh
 | `real_interval` | `float` | 0.0 | 每轮 tick 之间的真实间隔秒数 |
 | `seed` | `int \| None` | None | 随机种子 |
 | `output_dir` | `str \| Path \| None` | None | 输出目录 |
-| `num_users` | `int` | 1 | 用户数量 |
+| `num_groups` | `int` | 1 | 设备分组数量（仅用于运行状态元数据） |
 
 ##### SmartCollar 接口
 
 | 方法/属性 | 参数 | 返回值 | 说明 |
 |-----------|------|--------|------|
 | `__init__(profile, start_time, tick_interval, seed)` | 见下方 | — | 创建项圈实例 |
-| `generate_one_record()` | — | `dict` | 生成一条完整的数据记录（13 个字段） |
+| `generate_one_record()` | — | `dict` | 生成一条完整的数据记录（12 个字段） |
 | `profile` | — | `DogProfile` | 关联的狗档案 |
 | `sim_time` | — | `datetime` | 当前模拟时间 |
 | `tick_interval` | — | `timedelta` | 每 tick 推进的模拟时间 |
@@ -1388,7 +1387,7 @@ chmod +x scripts/docker_build_test.sh
 
 | 方法/属性 | 参数 | 返回值 | 说明 |
 |-----------|------|--------|------|
-| `random_profile(rng, user_id)` | `Generator \| None, str` | `DogProfile` | 静态方法：随机生成一个 DogProfile |
+| `random_profile(rng)` | `Generator \| None` | `DogProfile` | 静态方法：随机生成一个 DogProfile |
 | `hr_mean_offset` | — | `float` | 所有 trait 的心率均值偏移之和 |
 | `rr_mean_offset` | — | `float` | 所有 trait 的呼吸频率均值偏移之和 |
 | `temp_mean_offset` | — | `float` | 所有 trait 的体温均值偏移之和 |
@@ -1458,10 +1457,11 @@ chmod +x scripts/docker_build_test.sh
 |------|------|--------|------|
 | `get_engine_status()` | — | `dict \| None` | 读取 engine_status.json，返回引擎运行状态 |
 | `get_latest_records(n)` | `n: int = 20` | `list[dict]` | 读取最新 n 条数据记录（时间倒序） |
-| `get_records_by_user(user_id, n)` | `user_id: str, n: int = 50` | `list[dict]` | 按用户 ID 筛选记录 |
 | `get_records_by_device(device_id, n)` | `device_id: str, n: int = 20` | `list[dict]` | 按设备 ID 筛选记录 |
 | `get_total_record_count()` | — | `int` | 获取记录总数 |
 | `get_unique_devices()` | — | `list[str]` | 获取所有唯一设备 ID |
+
+> 说明：由于 Engine record 不含 `user_id`，设备级查询是当前唯一稳定的数据筛选方式。
 
 **使用示例**：
 
@@ -1572,7 +1572,7 @@ Engine 与 TUI/GUI 之间通过 `command.json` 文件进行指令交互。以下
 ```json
 {
   "running": true,
-  "num_users": 1,
+  "num_groups": 1,
   "num_dogs": 2,
   "total_ticks": 200,
   "tick_minutes": 1,
@@ -1583,7 +1583,7 @@ Engine 与 TUI/GUI 之间通过 `command.json` 文件进行指令交互。以下
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `running` | `bool` | 引擎是否正在运行 |
-| `num_users` | `int` | 用户数量 |
+| `num_groups` | `int` | 设备分组数量 |
 | `num_dogs` | `int` | 狗的数量 |
 | `total_ticks` | `int` | 总 tick 数 |
 | `tick_minutes` | `int` | 每 tick 对应的模拟分钟数 |
@@ -1678,9 +1678,10 @@ docker run --rm -v ./output_data:/app/output_data petnode-engine \
 
 **请求体参数（Request Body）**：
 
+> Engine 当前上报的 record **不包含 `user_id`**；用户与设备的绑定应在服务端绑定域中维护。
+
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 |--------|------|:----:|------|--------|
-| `user_id` | `string` | ✅ | 用户唯一标识 | `"user_e3e073dd"` |
 | `device_id` | `string` | ✅ | 设备（狗）唯一标识 | `"109f156a015a"` |
 | `timestamp` | `string` | ✅ | ISO 8601 格式的模拟时间戳 | `"2025-06-01T00:01:00"` |
 | `behavior` | `string` | ✅ | 行为状态：sleeping/resting/walking/running | `"sleeping"` |
@@ -1773,7 +1774,6 @@ docker run --rm -v ./output_data:/app/output_data petnode-engine \
 
 | 参数名 | 类型 | 说明 |
 |--------|------|------|
-| `user_id` | `string` | 用户唯一标识 |
 | `device_id` | `string` | 设备（狗）唯一标识 |
 | `timestamp` | `string` | ISO 8601 格式时间戳 |
 | `behavior` | `string` | 行为状态 |
@@ -1804,7 +1804,7 @@ docker run --rm -v ./output_data:/app/output_data petnode-engine \
 | 参数名 | 类型 | 说明 | 示例值 |
 |--------|------|------|--------|
 | `running` | `bool` | 引擎是否正在运行 | `true` |
-| `num_users` | `int` | 用户数量 | `1` |
+| `num_groups` | `int` | 设备分组数量 | `1` |
 | `num_dogs` | `int` | 狗的数量 | `2` |
 | `total_ticks` | `int` | 总 tick 数 | `200` |
 | `tick_minutes` | `int` | 每 tick 对应的模拟分钟数 | `1` |
@@ -1845,7 +1845,7 @@ docker run --rm -v ./output_data:/app/output_data petnode-engine \
 | **读取方** | Engine (HttpExporter，恢复后补发) |
 | **更新频率** | 仅在 Flask 服务器不可达时写入 |
 
-**缓存文件记录参数**：与实时数据流文件相同（13 个字段）
+**缓存文件记录参数**：与实时数据流文件相同（12 个字段）
 
 ---
 
@@ -1859,7 +1859,6 @@ TUI 后端为前端界面提供的内部 API（Python 方法调用，非 HTTP）
 |----------|----------|----------|----------|
 | `get_engine_status()` | `dict \| None` | `engine_status.json` | TUI 每 2 秒自动刷新 |
 | `get_latest_records(n=20)` | `list[dict]` | `realtime_stream.jsonl` | TUI 每 2 秒自动刷新 |
-| `get_records_by_user(user_id, n=50)` | `list[dict]` | `realtime_stream.jsonl` | 按需调用 |
 | `get_records_by_device(device_id, n=20)` | `list[dict]` | `realtime_stream.jsonl` | 按需调用 |
 | `get_total_record_count()` | `int` | `realtime_stream.jsonl` | 按需调用 |
 | `get_unique_devices()` | `list[str]` | `realtime_stream.jsonl` | 按需调用 |
@@ -1929,21 +1928,20 @@ TUI 后端为前端界面提供的内部 API（Python 方法调用，非 HTTP）
 
 ### 7.5 完整数据记录字段速查表
 
-以下是系统中核心数据记录（SmartCollar 生成）的 **13 个字段**完整定义：
+以下是系统中核心数据记录（SmartCollar 生成）的 **12 个字段**完整定义（**不含 `user_id`**）：
 
 | # | 字段名 | 类型 | 范围/格式 | 说明 | 生成逻辑 |
 |:-:|--------|------|-----------|------|----------|
-| 1 | `user_id` | `string` | `user_<8 hex>` | 用户唯一标识 | 登录时由 SHA-256 哈希生成 |
-| 2 | `device_id` | `string` | `<12 hex>` | 设备（狗）唯一标识 | 项圈创建时随机生成 |
-| 3 | `timestamp` | `string` | ISO 8601 | 模拟时间戳 | 每 tick 递增 tick_minutes 分钟 |
-| 4 | `behavior` | `string` | sleeping/resting/walking/running | 当前行为状态 | 马尔可夫状态机转移 |
-| 5 | `heart_rate` | `float` | 30.0 ~ 250.0 | 心率 (bpm) | 行为基准 + Trait偏移 + drift + Event |
-| 6 | `resp_rate` | `float` | 8.0 ~ 80.0 | 呼吸频率 (次/分) | 行为基准 + Trait偏移 + drift + Event |
-| 7 | `temperature` | `float` | 36.0 ~ 42.0 | 体温 (°C) | 行为基准 + Trait偏移 + Event |
-| 8 | `steps` | `int` | ≥ 0 | 今日累计步数 | 日内单调递增，跨天清零 |
-| 9 | `battery` | `int` | 100 | 电量百分比 | 当前固定为 100 |
-| 10 | `gps_lat` | `float` | 6 位小数 | GPS 纬度 | 上一位置 + 行为位移 |
-| 11 | `gps_lng` | `float` | 6 位小数 | GPS 经度 | 上一位置 + 行为位移 |
-| 12 | `event` | `string\|null` | fever/injury/null | 当前事件名称 | EventManager 按天触发 |
-| 13 | `event_phase` | `string\|null` | onset/peak/recovery/null | 事件阶段 | 事件内部状态机 |
+| 1 | `device_id` | `string` | `<12 hex>` | 设备（狗）唯一标识 | 项圈创建时随机生成 |
+| 2 | `timestamp` | `string` | ISO 8601 | 模拟时间戳 | 每 tick 递增 tick_minutes 分钟 |
+| 3 | `behavior` | `string` | sleeping/resting/walking/running | 当前行为状态 | 马尔可夫状态机转移 |
+| 4 | `heart_rate` | `float` | 30.0 ~ 250.0 | 心率 (bpm) | 行为基准 + Trait偏移 + drift + Event |
+| 5 | `resp_rate` | `float` | 8.0 ~ 80.0 | 呼吸频率 (次/分) | 行为基准 + Trait偏移 + drift + Event |
+| 6 | `temperature` | `float` | 36.0 ~ 42.0 | 体温 (°C) | 行为基准 + Trait偏移 + Event |
+| 7 | `steps` | `int` | ≥ 0 | 今日累计步数 | 日内单调递增，跨天清零 |
+| 8 | `battery` | `int` | 100 | 电量百分比 | 当前固定为 100 |
+| 9 | `gps_lat` | `float` | 6 位小数 | GPS 纬度 | 上一位置 + 行为位移 |
+| 10 | `gps_lng` | `float` | 6 位小数 | GPS 经度 | 上一位置 + 行为位移 |
+| 11 | `event` | `string\|null` | fever/injury/null | 当前事件名称 | EventManager 按天触发 |
+| 12 | `event_phase` | `string\|null` | onset/peak/recovery/null | 事件阶段 | 事件内部状态机 |
 
