@@ -96,6 +96,17 @@ logger = logging.getLogger("flask_server")
 # 创建 Flask 应用实例（__name__ 让 Flask 知道当前模块的位置）
 app = Flask(__name__)
 
+
+# ────────────────── CORS 支持（允许 Web 前端跨域调用）──────────────────
+
+@app.after_request
+def _add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
 # ────────────────── 初始化存储层（懒加载，避免启动时 DB 不可达导致崩溃）──────────────────
 
 # MongoDB 负责全量实时数据；MySQL 负责静态档案与异常信息。
@@ -240,10 +251,10 @@ _total_received: int = 0
 # 将微信认证、用户信息、宠物遥测三个 Blueprint 挂载到 Flask 应用。
 # 路由前缀由各 Blueprint 自身定义（/api/v1/wechat/* / /api/v1/me / /api/v1/pets/*）。
 try:
-    from flask_server.blueprints import wechat_bp, users_bp, pets_bp, devices_bp, family_bp
+    from flask_server.blueprints import wechat_bp, users_bp, pets_bp, devices_bp, family_bp, admin_bp
     from flask_server.db import ensure_indexes
 except ImportError:
-    from .blueprints import wechat_bp, users_bp, pets_bp, devices_bp, family_bp
+    from .blueprints import wechat_bp, users_bp, pets_bp, devices_bp, family_bp, admin_bp
     from .db import ensure_indexes
 
 app.register_blueprint(wechat_bp)
@@ -251,6 +262,7 @@ app.register_blueprint(users_bp)
 app.register_blueprint(pets_bp)
 app.register_blueprint(devices_bp)
 app.register_blueprint(family_bp)
+app.register_blueprint(admin_bp)
 
 # 在启动时尝试创建 MongoDB 索引。
 # ensure_indexes() 内部已处理 PyMongoError（MongoDB 未就绪时不阻断启动）。

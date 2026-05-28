@@ -4,6 +4,8 @@
 
 已为 PetNode C端模拟系统添加 MySQL 服务，用于把接收到的狗项圈数据拆分写入规范化表结构。
 
+当前约定：Engine 上报的 record 不包含 `user_id`；MySQLStorage 仅在历史兼容或旧数据补录场景下处理缺省 `user_id`，绑定关系仍由 Flask 侧维护。
+
 ## 核心改动
 
 ### 1. **docker-compose.yml** - 添加 MySQL 服务
@@ -49,7 +51,7 @@ telemetry_record
 
 **字段映射**：
 - `device_id`：引擎上报的字符串 ID，会被稳定映射成 MySQL 的 BIGINT 主键，同时原始值保存在 `device.device_sn`
-- `user_id`：默认写入 `1`，可通过环境变量覆盖
+- `user_id`：历史兼容字段，仅用于旧数据回填；Engine 新上报 record 不携带该字段（默认用户仅用于兼容迁移，可通过环境变量覆盖）
 - `heart_rate` / `resp_rate` / `temperature` / `steps` / `battery` / `gps_lat` / `gps_lng` / `behavior`：拆成 `telemetry_record`
 - `event` / `event_phase`：写入 `event_instance`
 
@@ -180,7 +182,7 @@ ORDER BY date DESC, timestamp DESC;
 ## 每日数据存储工作流程
 
 ```
-Engine 生成数据
+Engine 生成数据（不含 user_id）
     ↓
 HttpExporter POST /api/data
     ↓
@@ -188,10 +190,11 @@ Flask app.py 接收 & 验证
     ↓
 MySQLStorage.save()
     ↓
-① 从 timestamp 提取日期 (YYYY-MM-DD)
-② 添加 date 字段 (用于日期分类)
-③ 添加 ingested_at (服务器接收时间)
-④ INSERT INTO received_records
+① 如旧记录缺省 user_id，则回退默认用户；Engine 新上报不再追加 user_id
+② 从 timestamp 提取日期 (YYYY-MM-DD)
+③ 添加 date 字段 (用于日期分类)
+④ 添加 ingested_at (服务器接收时间)
+⑤ INSERT INTO received_records
     ↓
 每条记录都被标记上日期，便于后期按日期统计分析
 ```

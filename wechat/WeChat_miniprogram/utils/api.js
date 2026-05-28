@@ -1,6 +1,4 @@
-const BASE_URL = 'http://8.156.95.140:5000/api/v1';
-
-const BASE_URL = resolveBaseUrl();
+const BASE_URL = 'http://127.0.0.1:5000';
 
 /**
  * 核心请求函数
