@@ -181,7 +181,7 @@ services:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_QUEUE=petnode.records
     # 持续生成模拟数据：固定种子确保设备ID不变，1 秒每 tick，几乎无限 tick
-    command: ["--dogs", "2", "--ticks", "100000", "--interval", "1", "--seed", "99", "--device-ids", "c5c084a74254,e9b0917abc96", "--output-dir", "/app/output_data"]
+    command: ["--dogs", "10", "--ticks", "100000", "--interval", "1", "--seed", "99", "--output-dir", "/app/output_data"]
     depends_on:
       flask-server:
         condition: service_healthy    # 等 Flask 健康检查通过后再启动 Engine
