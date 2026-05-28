@@ -106,13 +106,69 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminBtn        = document.getElementById('login-admin-btn');
     const adminUserInput  = document.getElementById('admin-username');
     const adminPassInput  = document.getElementById('admin-password');
+    const userAvatarImg   = document.querySelector('.avatar-img');
+    const userActionText  = document.querySelector('.user-action-text');
+
+    // ── Feedback helpers ──
+
+    function showMsg(btn, text, type) {
+        // Remove any existing msg
+        var old = btn.parentNode.querySelector('.login-msg');
+        if (old) old.remove();
+        var el = document.createElement('span');
+        el.className = 'login-msg login-msg-' + type;
+        el.textContent = text;
+        btn.parentNode.insertBefore(el, btn.nextSibling);
+    }
+
+    function clearMsg(btn) {
+        var old = btn.parentNode.querySelector('.login-msg');
+        if (old) old.remove();
+    }
+
+    function setBtnLoading(btn, loading) {
+        if (loading) {
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            btn.dataset.origText = btn.textContent;
+            btn.textContent = '登录中...';
+        } else {
+            btn.disabled = false;
+            btn.classList.remove('btn-loading');
+            if (btn.dataset.origText) {
+                btn.textContent = btn.dataset.origText;
+            }
+        }
+    }
+
+    // ── Sidebar status update ──
+
+    function updateSidebar(username) {
+        if (userActionText) userActionText.textContent = username;
+        if (userAvatarImg) {
+            userAvatarImg.style.border = '2px solid #07c160';
+            userAvatarImg.style.borderRadius = '50%';
+        }
+        authArea.style.cursor = 'default';
+        // Remove click-to-login behavior when already logged in
+        authArea.style.pointerEvents = 'auto';
+    }
 
     function openModal() {
+        // If already logged in as admin, show admin panel directly
+        if (localStorage.getItem('petnode_admin_token')) {
+            return;
+        }
         loginOverlay.classList.remove('login-overlay-hidden');
         viewUser.style.display = 'block';
         viewAdmin.style.display = 'none';
         if (adminUserInput) adminUserInput.value = '';
         if (adminPassInput) adminPassInput.value = '';
+        if (adminBtn) {
+            adminBtn.classList.remove('btn-success');
+            setBtnLoading(adminBtn, false);
+            clearMsg(adminBtn);
+        }
     }
 
     function closeModal() {
@@ -123,8 +179,17 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('非常抱歉，暂时没有开放用户的网页登陆与注册');
     }
 
+    // ── Auth area click ──
+
     if (authArea) {
-        authArea.addEventListener('click', openModal);
+        authArea.addEventListener('click', function() {
+            // If already logged in, toggle admin panel via the switch
+            if (localStorage.getItem('petnode_admin_token')) {
+                // Don't open login modal when already logged in
+                return;
+            }
+            openModal();
+        });
     }
 
     if (loginCloseBtn) {
@@ -147,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
         adminTrigger.addEventListener('click', () => {
             viewUser.style.display = 'none';
             viewAdmin.style.display = 'block';
+            if (adminUserInput) adminUserInput.focus();
         });
     }
 
@@ -158,18 +224,87 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Admin login
+    // ── Admin login ──
+
     if (adminBtn) {
-        adminBtn.addEventListener('click', () => {
-            const u = adminUserInput ? adminUserInput.value.trim() : '';
-            const p = adminPassInput ? adminPassInput.value.trim() : '';
-            if (u === 'Test_Endmin' && p === 'Endfiled_Best') {
-                alert('Login Successful');
-                document.body.classList.add('admin-mode-active');
-                closeModal();
-            } else {
-                alert('Invalid Credentials');
+        adminBtn.addEventListener('click', function() {
+            var u = adminUserInput ? adminUserInput.value.trim() : '';
+            var p = adminPassInput ? adminPassInput.value.trim() : '';
+
+            if (!u) {
+                showMsg(adminBtn, '请输入用户名', 'error');
+                if (adminUserInput) adminUserInput.focus();
+                return;
             }
+            if (!p) {
+                showMsg(adminBtn, '请输入密码', 'error');
+                if (adminPassInput) adminPassInput.focus();
+                return;
+            }
+
+            clearMsg(adminBtn);
+            setBtnLoading(adminBtn, true);
+
+            fetch('http://127.0.0.1:5000/api/v1/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            }).then(function(res) {
+                return res.json().then(function(data) {
+                    return { ok: res.ok, status: res.status, data: data };
+                });
+            }).then(function(result) {
+                if (result.data.code === 0 && result.data.data && result.data.data.access_token) {
+                    localStorage.setItem('petnode_admin_token', result.data.data.access_token);
+
+                    // Success feedback
+                    adminBtn.classList.add('btn-success');
+                    adminBtn.textContent = '登录成功';
+                    showMsg(adminBtn, '正在进入管理面板...', 'success');
+
+                    // Update sidebar
+                    updateSidebar(u);
+
+                    // Close modal after brief delay
+                    setTimeout(function() {
+                        closeModal();
+                        adminBtn.classList.remove('btn-success');
+                        adminBtn.textContent = '管理员登录';
+                        clearMsg(adminBtn);
+                    }, 800);
+
+                    // Trigger admin mode activation
+                    setTimeout(function() {
+                        document.body.classList.add('admin-mode-active');
+                    }, 400);
+                } else {
+                    var msg = result.data.message || '用户名或密码错误';
+                    showMsg(adminBtn, msg, 'error');
+                    setBtnLoading(adminBtn, false);
+                }
+            }).catch(function(err) {
+                showMsg(adminBtn, '无法连接服务器，请确认后端已启动', 'error');
+                setBtnLoading(adminBtn, false);
+            });
         });
+
+        // Clear error msg on input
+        if (adminUserInput) {
+            adminUserInput.addEventListener('input', function() { clearMsg(adminBtn); });
+        }
+        if (adminPassInput) {
+            adminPassInput.addEventListener('input', function() { clearMsg(adminBtn); });
+            adminPassInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') adminBtn.click();
+            });
+        }
     }
+
+    // ── Restore sidebar on page load if already logged in ──
+    (function restoreLoginState() {
+        if (localStorage.getItem('petnode_admin_token')) {
+            updateSidebar('管理员');
+            document.body.classList.add('admin-mode-active');
+        }
+    })();
 });

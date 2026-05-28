@@ -857,6 +857,38 @@ html {
     transform: translateY(-1px);
 }
 
+/* ---- Login button states ---- */
+.login-main-btn.btn-loading {
+    background: #333;
+    color: #999;
+    cursor: wait;
+    transform: none;
+}
+
+.login-main-btn.btn-success {
+    background: #07c160;
+    color: #fff;
+    cursor: default;
+    transform: none;
+}
+
+/* ---- Login inline message ---- */
+.login-msg {
+    display: block;
+    text-align: center;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.login-msg-error {
+    color: #ff3b5c;
+}
+
+.login-msg-success {
+    color: #07c160;
+}
+
 /* ---- Bottom Switch Text ---- */
 .login-switch-text {
     text-align: center;

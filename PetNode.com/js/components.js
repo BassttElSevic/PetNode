@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let adminActive = false;
     let activeAccordionIndex = -1;
     let isCurtainAnimating = false;
+    let indicatorData = [];
+    let realtimeDevices = [];
 
     // ==========================================
     // DOM References
@@ -22,117 +24,172 @@ document.addEventListener('DOMContentLoaded', () => {
     const body           = document.body;
 
     // ==========================================
-    // Data
+    // GPS → Map coordinate conversion
     // ==========================================
-    const indicatorData = [
-        {
-            title: '狗狗项圈型号分布情况',
-            heatColor: '#00c8ff',
-            briefing: '根据重庆市各区域宠物佩戴数据分析，PetNode Max 型号在渝北、江北等大型犬集中区域占比最高，达到 <em>42%</em>；PetNode Core 作为全能型号在各区域分布均匀，占比 <em>35%</em>；轻量化的 PetNode Slim 主要集中于渝中半岛等小型犬偏好区域，占比 <em>23%</em>。整体来看，重庆主城区项圈覆盖率已达 87.3%，处于全国领先水平。',
-            metrics: [
-                { label: 'PetNode Max',   value: '42%', pct: 42, color: '#00c8ff' },
-                { label: 'PetNode Core',  value: '35%', pct: 35, color: '#00e5ff' },
-                { label: 'PetNode Slim',  value: '23%', pct: 23, color: '#80f0ff' }
-            ],
-            heatSpots: [
-                { x: 50, y: 15, r: 90 },  // 渝北
-                { x: 40, y: 30, r: 85 },  // 江北
-                { x: 50, y: 48, r: 70 },  // 渝中
-                { x: 35, y: 55, r: 60 },  // 九龙坡
-                { x: 28, y: 40, r: 55 },  // 沙坪坝
-                { x: 55, y: 50, r: 50 },  // 南岸
-                { x: 25, y: 75, r: 45 },  // 巴南
-            ]
-        },
-        {
-            title: '狗狗心跳健康情况分布情况',
-            heatColor: '#ff3b5c',
-            briefing: '实时心率监测数据显示，当前在线设备中 <em>94.2%</em> 的犬只心率处于正常区间（60–140 bpm），<em>3.1%</em> 存在偶发性心动过速，<em>1.8%</em> 表现为静息心率偏低。沙坪坝区域报告了 5 例心率异常预警，建议关注该区域宠物的运动强度管理。系统已自动推送健康提醒至相关饲主。',
-            metrics: [
-                { label: '心率正常 (60-140)',  value: '94.2%', pct: 94, color: '#00e676' },
-                { label: '偶发心动过速',        value: '3.1%',  pct: 31, color: '#ff9100' },
-                { label: '静息心率偏低',        value: '1.8%',  pct: 18, color: '#ffc400' },
-                { label: '异常预警',            value: '0.9%',  pct: 9,  color: '#ff3b5c' }
-            ],
-            heatSpots: [
-                { x: 28, y: 40, r: 95 },  // 沙坪坝 - 异常预警集中
-                { x: 50, y: 48, r: 65 },  // 渝中
-                { x: 40, y: 30, r: 55 },  // 江北
-                { x: 50, y: 15, r: 50 },  // 渝北
-                { x: 35, y: 55, r: 60 },  // 九龙坡
-                { x: 25, y: 75, r: 50 },  // 巴南
-                { x: 55, y: 50, r: 45 },  // 南岸
-            ]
-        },
-        {
-            title: '狗狗运动量指数情况',
-            heatColor: '#ff9100',
-            briefing: '本周运动量统计表明，江北区与渝北区犬只日均运动时长分别为 <em>72 分钟</em> 和 <em>68 分钟</em>，高于全市均值 55 分钟。渝中区因居住密度较高，日均运动时长仅 <em>38 分钟</em>，提示该区域宠物可能存在运动不足风险。系统建议渝中区饲主增加每日遛狗频次。',
-            metrics: [
-                { label: '高活跃 (>90min)',  value: '28%',  pct: 28, color: '#ff9100' },
-                { label: '正常 (45-90min)',  value: '47%',  pct: 47, color: '#00e5ff' },
-                { label: '偏低 (20-45min)',  value: '18%',  pct: 18, color: '#ffc400' },
-                { label: '严重不足 (<20min)', value: '7%',   pct: 7,  color: '#ff5252' }
-            ],
-            heatSpots: [
-                { x: 42, y: 28, r: 95 },  // 江北 - 高活跃
-                { x: 50, y: 15, r: 85 },  // 渝北 - 高活跃
-                { x: 50, y: 48, r: 55 },  // 渝中 - 偏低
-                { x: 28, y: 40, r: 50 },  // 沙坪坝
-                { x: 55, y: 50, r: 55 },  // 南岸
-                { x: 35, y: 55, r: 60 },  // 九龙坡
-                { x: 25, y: 75, r: 50 },  // 巴南
-            ]
-        },
-        {
-            title: '狗狗瘙痒动作频繁分布情况',
-            heatColor: '#00e676',
-            briefing: '通过项圈内置加速度传感器与 AI 行为识别模型分析，近 7 日瘙痒动作频率较上月上升 <em>12.7%</em>。其中南岸区与巴南区增幅最为显著（<em>+18.3%</em>），可能与近期气温回升及花粉浓度升高有关。系统已标记 23 台设备为"高频瘙痒"，建议相关饲主关注皮肤健康及寄生虫防护。',
-            metrics: [
-                { label: '低频 (<2次/时)',   value: '62%',  pct: 62, color: '#00e676' },
-                { label: '正常 (2-5次/时)',  value: '24%',  pct: 24, color: '#00e5ff' },
-                { label: '高频 (5-10次/时)', value: '11%',  pct: 11, color: '#ff9100' },
-                { label: '持续高频 (>10次)',  value: '3%',   pct: 3,  color: '#ff3b5c' }
-            ],
-            heatSpots: [
-                { x: 60, y: 55, r: 95 },  // 南岸 - 高频
-                { x: 30, y: 78, r: 85 },  // 巴南 - 高频
-                { x: 50, y: 48, r: 55 },  // 渝中
-                { x: 40, y: 30, r: 50 },  // 江北
-                { x: 35, y: 55, r: 60 },  // 九龙坡
-                { x: 20, y: 65, r: 48 },  // 大渡口
-                { x: 28, y: 40, r: 45 },  // 沙坪坝
-            ]
-        },
-        {
-            title: '狗狗睡眠质量区域分布情况',
-            heatColor: '#b450ff',
-            briefing: '基于夜间体动与心率变异性（HRV）综合评估，全市犬只睡眠质量评分为 <em>78.6/100</em>。九龙坡区与沙坪坝区得分最高（<em>84.2</em>），渝中区得分较低（<em>71.5</em>），可能与夜间环境噪音相关。深度睡眠时长平均为 5.2 小时，占整体睡眠的 42%。',
-            metrics: [
-                { label: '优秀 (>8h)',    value: '32%',  pct: 32, color: '#b450ff' },
-                { label: '良好 (6-8h)',   value: '41%',  pct: 41, color: '#7c4dff' },
-                { label: '一般 (4-6h)',   value: '19%',  pct: 19, color: '#448aff' },
-                { label: '不足 (<4h)',    value: '8%',   pct: 8,  color: '#ff5252' }
-            ],
-            heatSpots: [
-                { x: 35, y: 55, r: 92 },  // 九龙坡 - 优秀
-                { x: 28, y: 40, r: 85 },  // 沙坪坝 - 优秀
-                { x: 50, y: 48, r: 60 },  // 渝中 - 较低分
-                { x: 40, y: 30, r: 55 },  // 江北
-                { x: 50, y: 15, r: 50 },  // 渝北
-                { x: 55, y: 50, r: 55 },  // 南岸
-                { x: 25, y: 75, r: 50 },  // 巴南
-            ]
+    function gpsToMapPercent(lat, lng) {
+        const x = ((lng - 106.3) / 0.6) * 95.83 + 2.5;
+        const y = ((29.7 - lat) / 0.4) * 97 + 1;
+        return {
+            x: Math.max(0, Math.min(100, x)),
+            y: Math.max(0, Math.min(100, y))
+        };
+    }
+
+    function generateDeviceHeatSpots(devices) {
+        if (!devices || devices.length === 0) return [];
+        return devices
+            .filter(function(d) { return d.gps_lat && d.gps_lng; })
+            .map(function(d) {
+                var pos = gpsToMapPercent(d.gps_lat, d.gps_lng);
+                return { x: pos.x, y: pos.y, r: 55 };
+            });
+    }
+
+    // ==========================================
+    // Build indicators from API data
+    // ==========================================
+    function buildIndicatorData(stats, devices) {
+        var indicators = [];
+        var total = stats.sample_count || 1;
+
+        // ── Indicator 1: 心率健康分布 ──
+        var hrDist = stats.heart_rate_distribution || {};
+        var hrTotal = hrDist.normal_60_140 + hrDist.tachycardia_over_140 + hrDist.low_under_60 + hrDist.critical || 1;
+        var hrNormalPct  = Math.round(hrDist.normal_60_140 / hrTotal * 100);
+        var hrTachyPct   = Math.round(hrDist.tachycardia_over_140 / hrTotal * 100);
+        var hrLowPct     = Math.round(hrDist.low_under_60 / hrTotal * 100);
+        var hrCritPct    = Math.round(hrDist.critical / hrTotal * 100);
+
+        var hrBriefing = '实时心率监测显示，当前在线设备中 <em>' + hrNormalPct + '%</em> 的犬只心率处于正常区间（60–140 bpm），';
+        hrBriefing += '<em>' + hrTachyPct + '%</em> 存在偶发性心动过速，';
+        hrBriefing += '<em>' + hrLowPct + '%</em> 表现为静息心率偏低。';
+        if (hrCritPct > 0) {
+            hrBriefing += '系统已标记 <em>' + hrDist.critical + '</em> 例异常心率预警，建议及时关注。';
         }
-    ];
+        hrBriefing += ' 数据基于最近 ' + stats.sample_count + ' 条上报记录。';
+
+        indicators.push({
+            title: '狗狗心率健康分布',
+            heatColor: '#ff3b5c',
+            briefing: hrBriefing,
+            metrics: [
+                { label: '正常 (60-140 bpm)', value: hrNormalPct + '%',  pct: hrNormalPct, color: '#00e676' },
+                { label: '心动过速 (>140)',   value: hrTachyPct + '%',   pct: hrTachyPct,  color: '#ff9100' },
+                { label: '心率偏低 (<60)',    value: hrLowPct + '%',     pct: hrLowPct,    color: '#ffc400' },
+                { label: '异常预警',          value: hrCritPct + '%',    pct: Math.max(hrCritPct, 10), color: '#ff3b5c' }
+            ],
+            heatSpots: generateDeviceHeatSpots(devices)
+        });
+
+        // ── Indicator 2: 行为状态分布 ──
+        var behDist = stats.behavior_distribution || {};
+        var behTotal = (behDist.sleeping || 0) + (behDist.resting || 0) + (behDist.walking || 0) + (behDist.running || 0) || 1;
+        var sleepPct  = Math.round((behDist.sleeping || 0) / behTotal * 100);
+        var restPct   = Math.round((behDist.resting || 0) / behTotal * 100);
+        var walkPct   = Math.round((behDist.walking || 0) / behTotal * 100);
+        var runPct    = Math.round((behDist.running || 0) / behTotal * 100);
+
+        var activePct = walkPct + runPct;
+        var behBriefing = '行为监测统计表明，当前犬只处于活跃状态（行走+奔跑）的比例为 <em>' + activePct + '%</em>，';
+        behBriefing += '休息/睡眠占比 <em>' + (sleepPct + restPct) + '%</em>。';
+        if (activePct < 20) {
+            behBriefing += '活跃度偏低，提示部分宠物可能存在运动不足。';
+        } else if (activePct > 50) {
+            behBriefing += '活跃度较高，显示宠物运动状态良好。';
+        }
+        behBriefing += ' 基于最近 ' + stats.sample_count + ' 条记录统计。';
+
+        indicators.push({
+            title: '狗狗行为状态分布',
+            heatColor: '#ff9100',
+            briefing: behBriefing,
+            metrics: [
+                { label: '睡眠 (sleeping)', value: sleepPct + '%', pct: sleepPct, color: '#7c4dff' },
+                { label: '休息 (resting)',  value: restPct + '%',  pct: restPct,  color: '#448aff' },
+                { label: '行走 (walking)',  value: walkPct + '%',  pct: walkPct,  color: '#00e5ff' },
+                { label: '奔跑 (running)',  value: runPct + '%',   pct: runPct,   color: '#ff9100' }
+            ],
+            heatSpots: generateDeviceHeatSpots(devices)
+        });
+
+        // ── Indicator 3: 各行为平均心率 ──
+        var behAvgHr = stats.behavior_avg_hr || {};
+        var behHrMetrics = [];
+        var behNames = { sleeping: '睡眠时', resting: '休息时', walking: '行走时', running: '奔跑时' };
+        var behColors = { sleeping: '#7c4dff', resting: '#448aff', walking: '#00e5ff', running: '#ff9100' };
+
+        var maxHr = 60;
+        for (var b in behAvgHr) {
+            if (behAvgHr[b].avg_hr > maxHr) maxHr = behAvgHr[b].avg_hr;
+        }
+        if (maxHr < 60) maxHr = 60;
+
+        for (var key in behAvgHr) {
+            var item = behAvgHr[key];
+            var pctVal = Math.round(item.avg_hr / maxHr * 100);
+            behHrMetrics.push({
+                label: behNames[key] || key,
+                value: item.avg_hr + ' bpm',
+                pct: pctVal,
+                color: behColors[key] || '#00e5ff'
+            });
+        }
+
+        var behHrBriefing = '不同行为状态下的平均心率对比：';
+        for (var k in behAvgHr) {
+            behHrBriefing += (behNames[k] || k) + '平均心率 <em>' + behAvgHr[k].avg_hr + ' bpm</em>（' + behAvgHr[k].count + ' 条记录）；';
+        }
+        behHrBriefing += '此数据可用于评估宠物在不同活动强度下的心肺功能表现。';
+
+        indicators.push({
+            title: '各行为状态平均心率',
+            heatColor: '#00e5ff',
+            briefing: behHrBriefing,
+            metrics: behHrMetrics,
+            heatSpots: generateDeviceHeatSpots(devices)
+        });
+
+        // ── Indicator 4: 实时设备总览 ──
+        var avg = stats.averages || {};
+        var devCount = devices ? devices.length : (stats.active_devices || 0);
+
+        var overviewBriefing = '当前共有 <em>' + devCount + '</em> 台活跃设备在线，';
+        overviewBriefing += '最近 ' + stats.sample_count + ' 条数据显示：';
+        overviewBriefing += '平均心率 <em>' + (avg.heart_rate_bpm || '--') + ' bpm</em>，';
+        overviewBriefing += '平均呼吸率 <em>' + (avg.resp_rate_bpm || '--') + ' 次/分钟</em>，';
+        overviewBriefing += '平均体温 <em>' + (avg.temperature_c || '--') + '°C</em>，';
+        overviewBriefing += '平均步数 <em>' + (avg.steps || '--') + ' 步</em>。';
+        if (stats.active_events > 0) {
+            overviewBriefing += '当前有 <em>' + stats.active_events + '</em> 个活跃事件需要关注。';
+        } else {
+            overviewBriefing += '当前无活跃异常事件。';
+        }
+
+        var devMetrics = [
+            { label: '活跃设备数', value: devCount + ' 台', pct: Math.min(devCount * 10, 100), color: '#00c8ff' },
+            { label: '平均心率',   value: (avg.heart_rate_bpm || '--') + ' bpm', pct: Math.round((avg.heart_rate_bpm || 60) / 200 * 100), color: '#ff3b5c' },
+            { label: '平均呼吸率', value: (avg.resp_rate_bpm || '--') + ' 次/分', pct: Math.round((avg.resp_rate_bpm || 15) / 40 * 100), color: '#00e676' },
+            { label: '平均体温',   value: (avg.temperature_c || '--') + '°C', pct: Math.round((avg.temperature_c || 38) / 42 * 100), color: '#ff9100' }
+        ];
+
+        indicators.push({
+            title: '实时设备运行总览',
+            heatColor: '#00c8ff',
+            briefing: overviewBriefing,
+            metrics: devMetrics,
+            heatSpots: generateDeviceHeatSpots(devices)
+        });
+
+        return indicators;
+    }
 
     // ==========================================
     // Build Accordion
     // ==========================================
     function buildAccordion() {
         accordion.innerHTML = '';
-        indicatorData.forEach((item, i) => {
-            const el = document.createElement('div');
+        indicatorData.forEach(function(item, i) {
+            var el = document.createElement('div');
             el.className = 'accordion-item';
             el.innerHTML = [
                 '<button class="accordion-trigger" data-index="' + i + '">',
@@ -174,6 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderHeatSpots(spots, color) {
         clearHeatSpots();
+        if (!spots || spots.length === 0) return;
+
         spots.forEach(function(s) {
             var spot = document.createElement('div');
             spot.className = 'heat-spot';
@@ -221,23 +280,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isCurtainAnimating) return;
         isCurtainAnimating = true;
 
-        // Reset curtain above viewport
         curtain.classList.remove('animating');
         curtain.style.transform = 'translateY(-100%)';
-        // Force reflow
         void curtain.offsetHeight;
 
-        // Phase 1: pull down to cover
         curtain.classList.add('animating');
         curtain.style.transform = 'translateY(0%)';
 
-        // Phase 2: at 350ms, swap and pull through
         setTimeout(function() {
             if (onCovered) onCovered();
             curtain.style.transform = 'translateY(100%)';
         }, 350);
 
-        // Phase 3: reset
         setTimeout(function() {
             curtain.classList.remove('animating');
             curtain.style.transform = 'translateY(-100%)';
@@ -264,7 +318,6 @@ document.addEventListener('DOMContentLoaded', () => {
         var items = accordion.querySelectorAll('.accordion-item');
         var wasSame = activeAccordionIndex === index;
 
-        // Collapse all
         for (var i = 0; i < items.length; i++) {
             items[i].classList.remove('active');
             var fill = items[i].querySelector('.metric-fill');
@@ -272,7 +325,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (wasSame) {
-            // Toggle off
             activeAccordionIndex = -1;
             animateCurtain(function() {
                 mapHeat.classList.remove('active');
@@ -282,12 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Expand new item
         activeAccordionIndex = index;
         var activeItem = items[index];
         activeItem.classList.add('active');
 
-        // Animate metric bars
         var data = indicatorData[index];
         setTimeout(function() {
             var fills = activeItem.querySelectorAll('.metric-fill');
@@ -296,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 100);
 
-        // Curtain + heatmap + briefing
         animateCurtain(function() {
             renderHeatSpots(data.heatSpots, data.heatColor);
             mapHeat.classList.add('active');
@@ -323,6 +372,36 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleInput.checked = true;
         overlay.classList.add('active');
         body.style.overflow = 'hidden';
+
+        if (consoleStatus) consoleStatus.textContent = '正在加载数据...';
+
+        Promise.all([
+            Api.getStats().catch(function() { return null; }),
+            Api.getDevicesRealtime().catch(function() { return null; })
+        ]).then(function(results) {
+            var stats = results[0];
+            var devicesResp = results[1];
+
+            if (!stats) {
+                if (consoleStatus) consoleStatus.textContent = '数据加载失败，请检查后端服务';
+                updateBriefing('无法连接到后端服务器，请确认后端已启动。<br>默认地址：' + Api.BASE_URL);
+                return;
+            }
+
+            realtimeDevices = (devicesResp && devicesResp.devices) ? devicesResp.devices : [];
+            indicatorData = buildIndicatorData(stats, realtimeDevices);
+            buildAccordion();
+            attachAccordionEvents();
+            activeAccordionIndex = -1;
+
+            if (consoleStatus) {
+                consoleStatus.textContent = '系统就绪 · ' + (stats.active_devices || 0) + ' 台设备在线';
+            }
+            updateBriefing('数据加载成功。请选择右侧数据指标以查看详细分析简报。');
+        }).catch(function(err) {
+            if (consoleStatus) consoleStatus.textContent = '数据加载失败: ' + (err.message || '未知错误');
+            updateBriefing('数据加载失败: ' + (err.message || '未知错误'));
+        });
     }
 
     function closeAdmin() {
@@ -331,7 +410,6 @@ document.addEventListener('DOMContentLoaded', () => {
         overlay.classList.remove('active');
         body.style.overflow = '';
 
-        // Reset all accordion state
         var items = accordion.querySelectorAll('.accordion-item');
         for (var i = 0; i < items.length; i++) {
             items[i].classList.remove('active');
@@ -345,8 +423,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clearHeatSpots();
     }
 
+    // Admin toggle — always check token at toggle time
     toggleInput.addEventListener('change', function() {
         if (toggleInput.checked) {
+            if (!Api.isLoggedIn()) {
+                alert('请先登录管理员账号');
+                toggleInput.checked = false;
+                return;
+            }
             openAdmin();
         } else {
             closeAdmin();
@@ -364,6 +448,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // Init
     // ==========================================
-    buildAccordion();
-    attachAccordionEvents();
+    // Accordion built on-demand when admin opens with real API data.
+    // If already logged in, user can toggle admin switch to load data.
 });
