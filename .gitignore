@@ -1,2 +1,7 @@
 venv/
 .claude/
+*.mp4
+*.mov
+*.avi
+*.webm
+*.mkv
