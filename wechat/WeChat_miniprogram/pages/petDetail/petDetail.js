@@ -25,11 +25,35 @@ Page({
       fail: () => {} // 模拟器中 GPS 不可用，静默忽略
     });
     this.fetchAllData(petId);
+    // 每 10 秒自动拉取最新数据
+    this.pollTimer = setInterval(() => {
+      this.fetchLatest(petId);
+    }, 10000);
   },
 
   onShow() {
     if (this.data.petId) {
       this.fetchAllData(this.data.petId);
+    }
+    // 恢复轮询
+    if (this.data.petId && !this.pollTimer) {
+      this.pollTimer = setInterval(() => {
+        this.fetchLatest(this.data.petId);
+      }, 10000);
+    }
+  },
+
+  onHide() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  },
+
+  onUnload() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
   },
 
@@ -64,6 +88,49 @@ Page({
       }
     } catch (_) {
       wx.showToast({ title: '数据加载失败', icon: 'none' });
+    }
+  },
+
+  async fetchLatest(petId) {
+    // 静默轮询：不显示错误 toast，仅更新变化的数据
+    try {
+      const [summary, hrSeries, respSeries, tempSeries] = await Promise.all([
+        api.get(`/api/v1/pets/${petId}/summary`).catch(() => null),
+        api.get(`/api/v1/pets/${petId}/heart-rate/series`, { limit: 7 }).catch(() => null),
+        api.get(`/api/v1/pets/${petId}/respiration/series`, { limit: 7 }).catch(() => null),
+        api.get(`/api/v1/pets/${petId}/temperature/series`, { limit: 7 }).catch(() => null)
+      ]);
+
+      // 全部请求失败（如 token 已过期被 api.js 处理）→ 跳过
+      if (!summary && !hrSeries && !respSeries && !tempSeries) return;
+
+      const hr = this.buildSeriesData(hrSeries, 'value_bpm');
+      const resp = this.buildSeriesData(respSeries, 'value_bpm');
+      const temp = this.buildSeriesData(tempSeries, 'value_celsius');
+
+      const newHrAvg = summary ? String(Math.round(summary.latest_heart_rate_bpm || 0)) : this.data.hrAvg;
+      const newRespAvg = summary ? String(Math.round(summary.latest_respiration_bpm || 0)) : this.data.respAvg;
+      const newTempAvg = temp.dataPoints.length > 0 ? temp.avg.toFixed(1) : this.data.tempAvg;
+
+      // 仅当数据实际变化时才更新 UI（减少不必要的 setData）
+      if (newHrAvg !== this.data.hrAvg || newRespAvg !== this.data.respAvg || newTempAvg !== this.data.tempAvg) {
+        const now = new Date();
+        const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+        this.setData({
+          lastFetchTime: timeStr,
+          hrAvg: newHrAvg,
+          respAvg: newRespAvg,
+          tempAvg: newTempAvg,
+          hrDp: hr.dataPoints,
+          respDp: resp.dataPoints,
+          tempDp: temp.dataPoints,
+          hrSummary: `心率近${hr.dataPoints.length}次均值 ${Math.round(hr.avg)} BPM，峰值 ${Math.round(hr.maxVal)} BPM`,
+          respSummary: `呼吸近${resp.dataPoints.length}次均值 ${Math.round(resp.avg)} 次/分，峰值 ${Math.round(resp.maxVal)} 次/分`,
+          tempSummary: `体温近${temp.dataPoints.length}次均值 ${temp.avg.toFixed(1)}°C，峰值 ${temp.maxVal.toFixed(1)}°C`,
+        });
+      }
+    } catch (_) {
+      // 静默忽略轮询错误（401 已由 api.js 处理跳转）
     }
   },
 

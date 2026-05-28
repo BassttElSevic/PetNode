@@ -170,3 +170,70 @@ def get_stats():
         "device_ids": device_ids,
         "generated_at": now_iso(),
     })
+
+
+@admin_bp.route("/devices/realtime", methods=["GET"])
+def get_devices_realtime():
+    """GET /api/v1/admin/devices/realtime
+
+    返回所有活跃设备的最新一条遥测数据，用于实时监控面板。
+    按最近上报时间倒序排列。
+    """
+    db = get_db()
+
+    try:
+        pipeline = [
+            {"$sort": {"_id": -1}},
+            {"$group": {
+                "_id": "$device_id",
+                "timestamp": {"$first": "$timestamp"},
+                "heart_rate": {"$first": "$heart_rate"},
+                "resp_rate": {"$first": "$resp_rate"},
+                "temperature": {"$first": "$temperature"},
+                "steps": {"$first": "$steps"},
+                "battery": {"$first": "$battery"},
+                "behavior": {"$first": "$behavior"},
+                "gps_lat": {"$first": "$gps_lat"},
+                "gps_lng": {"$first": "$gps_lng"},
+                "event": {"$first": "$event"},
+                "event_phase": {"$first": "$event_phase"},
+            }},
+            {"$sort": {"timestamp": -1}},
+            {"$limit": 50},
+        ]
+        rows = list(db["received_records"].aggregate(pipeline))
+    except Exception:
+        rows = []
+
+    # 尝试获取宠物名称
+    pet_names = {}
+    try:
+        for p in db["user_pets"].find({}, {"_id": 0, "device_id": 1, "pet_name": 1}):
+            pet_names[p["device_id"]] = p.get("pet_name", "")
+    except Exception:
+        pass
+
+    devices = []
+    for r in rows:
+        did = r["_id"]
+        devices.append({
+            "device_id": did,
+            "pet_name": pet_names.get(did, ""),
+            "timestamp": r.get("timestamp"),
+            "heart_rate": r.get("heart_rate"),
+            "resp_rate": r.get("resp_rate"),
+            "temperature": r.get("temperature"),
+            "steps": r.get("steps"),
+            "battery": r.get("battery"),
+            "behavior": r.get("behavior"),
+            "gps_lat": r.get("gps_lat"),
+            "gps_lng": r.get("gps_lng"),
+            "event": r.get("event"),
+            "event_phase": r.get("event_phase"),
+        })
+
+    return ok({
+        "count": len(devices),
+        "devices": devices,
+        "generated_at": now_iso(),
+    })

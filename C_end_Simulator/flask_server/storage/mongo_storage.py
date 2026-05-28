@@ -162,7 +162,7 @@ class MongoStorage(BaseStorage):
 
         cursor = (
             self._collection.find(criteria, {"_id": 0})
-            .sort("timestamp", -1)
+            .sort("_id", -1)
             .skip(max(offset, 0))
             .limit(max(limit, 1))
         )
@@ -179,6 +179,12 @@ class MongoStorage(BaseStorage):
             {"device_id": doc["_id"], "count": doc["count"]}
             for doc in cursor
         ]
+
+    def clean_all_records(self) -> int:
+        """清空 received_records 集合（Engine 重启时调用，避免新旧数据混叠）。"""
+        result = self._collection.delete_many({})
+        logger.info("清理 received_records: 删除了 %d 条旧数据", result.deleted_count)
+        return result.deleted_count
 
     def close(self) -> None:
         """关闭 MongoClient 连接。"""

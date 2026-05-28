@@ -265,12 +265,18 @@ app.register_blueprint(family_bp)
 app.register_blueprint(admin_bp)
 
 # 在启动时尝试创建 MongoDB 索引。
-# ensure_indexes() 内部已处理 PyMongoError（MongoDB 未就绪时不阻断启动）。
-# 此处的 broad catch 仅应对极少数不可预期的启动异常（例如 MongoClient 配置解析错误）。
 try:
     ensure_indexes()
 except Exception as _idx_exc:
     logger.warning("vx API 索引初始化出现意外异常: %s", _idx_exc)
+
+# 启动时自动清理旧遥测数据（Engine 重启后模拟时钟重置，旧数据时间戳可能干扰查询）
+if os.environ.get("CLEAN_ON_STARTUP", "").lower() in ("1", "true", "yes"):
+    try:
+        deleted = mongo_storage.clean_all_records()
+        logger.info("启动清理完成: 删除了 %d 条旧记录", deleted)
+    except Exception as _clean_exc:
+        logger.warning("启动清理失败（MongoDB 可能尚未就绪）: %s", _clean_exc)
 
 # ────────────────── API 路由 ──────────────────
 
@@ -497,59 +503,99 @@ def query_profile_v1():
 
 @app.route("/demo/qrcodes")
 def demo_qrcodes():
-    """动态生成二维码演示页面，设备 ID 从 MongoDB 实时读取"""
+    """动态生成二维码绑定页面，仅显示当前活跃设备（最近 200 条中出现的设备）"""
     try:
-        latest = mongo_storage.get_active_devices(4)
+        col = mongo_storage._collection
+        pipeline = [
+            {"$sort": {"_id": -1}},
+            {"$limit": 200},
+            {"$group": {
+                "_id": "$device_id",
+                "count": {"$sum": 1},
+                "last_hr": {"$first": "$heart_rate"},
+                "last_behavior": {"$first": "$behavior"},
+                "last_ts": {"$first": "$timestamp"},
+            }},
+            {"$sort": {"count": -1}},
+            {"$limit": 10},
+        ]
+        active = list(col.aggregate(pipeline))
     except Exception:
-        latest = []
+        active = []
 
+    if not active:
+        return """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<title>PetNode 扫码绑定</title><meta http-equiv="refresh" content="10">
+<style>body{font-family:-apple-system,sans-serif;background:#f5f5f5;padding:40px;text-align:center}
+h1{color:#333}.msg{color:#888;margin-top:20px}</style></head>
+<body><h1>PetNode 扫码绑定</h1><p class="msg">暂无活跃设备，请确认 Engine 正在运行。</p>
+<p style="color:#aaa;font-size:12px">页面每 10 秒自动刷新</p></body></html>""", 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    # 尝试从 user_pets 获取宠物名称
+    pet_names = {}
+    try:
+        for p in col.database["user_pets"].find({}, {"_id": 0, "device_id": 1, "pet_name": 1}):
+            pet_names[p["device_id"]] = p.get("pet_name", "")
+    except Exception:
+        pass
+
+    emoji = ["🐕", "🐩", "🐕‍🦺", "🦮", "🐶", "🐾", "🦊", "🐺", "🐕", "🐩"]
     cards_html = ""
-    for i, d in enumerate(latest):
-        did = d["device_id"]
+    for i, d in enumerate(active):
+        did = d["_id"]
+        name = pet_names.get(did, f"设备 {i+1}")
+        hr = d.get("last_hr", "--")
+        behavior = d.get("last_behavior", "--")
+        ts = (d.get("last_ts") or "")[:19]
         cards_html += f"""<div class="card">
-  <h3>{['🐕','🐩','🐕‍🦺','🦮'][i]} 设备 {i+1}</h3>
+  <h3>{emoji[i % len(emoji)]} {name}</h3>
   <p class="id">{did}</p>
   <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=petnode:device:{did}" alt="QR">
   <p class="hint"><code>petnode:device:{did}</code></p>
-  <p class="hint">记录数: {d['count']}</p>
+  <p class="hint">❤️ {hr} bpm · {behavior} · {ts}</p>
+  <p class="hint">近 5 分钟: {d['count']} 条记录</p>
 </div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PetNode 扫码绑定</title>
+<meta http-equiv="refresh" content="30">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:-apple-system,sans-serif;background:#f5f5f5;padding:20px}}
-h1{{text-align:center;color:#333;margin-bottom:10px}}
-.sub{{text-align:center;color:#888;margin-bottom:10px;font-size:13px}}
+h1{{text-align:center;color:#333;margin-bottom:4px}}
+.sub{{text-align:center;color:#888;margin-bottom:20px;font-size:13px}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;max-width:900px;margin:0 auto}}
 .card{{background:#fff;border-radius:16px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05)}}
 .card h3{{font-size:16px;margin-bottom:4px}}
-.card .id{{font-size:11px;color:#aaa;margin-bottom:10px;word-break:break-all}}
+.card .id{{font-size:11px;color:#aaa;margin-bottom:10px;word-break:break-all;font-family:monospace}}
 .card img{{width:180px;height:180px;border:1px dashed #ddd;border-radius:8px}}
-.card .hint{{margin-top:8px;font-size:12px;color:#888}}
+.card .hint{{margin-top:6px;font-size:12px;color:#888}}
 .card .hint code{{background:#f0f0f0;padding:2px 6px;border-radius:4px;font-size:11px}}
 .steps{{max-width:900px;margin:30px auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}}
 .steps h2{{font-size:18px;margin-bottom:10px}}
 .steps ol{{padding-left:20px}}
 .steps li{{padding:6px 0;color:#555;line-height:1.6}}
+.badge{{display:inline-block;background:#07c160;color:#fff;font-size:10px;padding:2px 8px;border-radius:10px;margin-left:4px}}
 </style></head>
 <body>
-<h1>🐾 PetNode 扫码绑定</h1>
-<p class="sub">实时数据 · 自动刷新 · 页面刷新可更新设备列表</p>
+<h1>PetNode 扫码绑定</h1>
+<p class="sub">当前活跃设备 · 页面每 30 秒自动刷新</p>
 <div class="grid">{cards_html}</div>
 <div class="steps">
-<h2>📋 操作步骤</h2>
+<h2>操作步骤</h2>
 <ol>
 <li>微信开发者工具编译小程序</li>
-<li>首页点击 <strong>「[-] 扫码添加」</strong></li>
+<li>首页点击 <strong>「扫码添加」</strong></li>
 <li>扫描上方对应设备的二维码</li>
 <li>点击弹窗<strong>「绑定」</strong></li>
 <li>新设备出现在首页，点击可查看实时数据</li>
 </ol>
 </div>
 </body></html>""", 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 
 
 # ────────────────── 启动入口 ──────────────────
