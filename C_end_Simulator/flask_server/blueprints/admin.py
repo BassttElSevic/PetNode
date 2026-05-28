@@ -237,3 +237,65 @@ def get_devices_realtime():
         "devices": devices,
         "generated_at": now_iso(),
     })
+
+
+@admin_bp.route("/devices/<device_id>/detail", methods=["GET"])
+def get_device_detail(device_id: str):
+    """GET /api/v1/admin/devices/<device_id>/detail
+    返回单设备完整详情：快照 + 心率/呼吸/体温序列 + 事件。"""
+    db = get_db()
+
+    latest = db["received_records"].find_one(
+        {"device_id": device_id}, {"_id": 0}, sort=[("_id", -1)])
+    if not latest:
+        return err(40401, "设备不存在或暂无数据", 404)
+
+    def _series(field, out_field, limit=50):
+        rows = list(db["received_records"].find(
+            {"device_id": device_id, field: {"$exists": True}},
+            {"_id": 0, "timestamp": 1, field: 1},
+            sort=[("_id", -1)], limit=limit))
+        rows.reverse()
+        return [{"ts": r["timestamp"], out_field: r[field]} for r in rows]
+
+    hr_points = _series("heart_rate", "value_bpm")
+    rr_points = _series("resp_rate", "value_bpm")
+    temp_points = _series("temperature", "value_celsius")
+
+    event_rows = list(db["received_records"].find(
+        {"device_id": device_id, "event": {"$ne": None, "$exists": True}},
+        {"_id": 0, "timestamp": 1, "event": 1, "event_phase": 1, "behavior": 1},
+        sort=[("_id", -1)], limit=10))
+
+    pet_name = ""
+    try:
+        p = db["user_pets"].find_one({"device_id": device_id}, {"_id": 0, "pet_name": 1})
+        if p:
+            pet_name = p.get("pet_name", "")
+    except Exception:
+        pass
+
+    return ok({
+        "device_id": device_id,
+        "pet_name": pet_name,
+        "latest": {
+            "timestamp": latest.get("timestamp"),
+            "heart_rate": latest.get("heart_rate"),
+            "resp_rate": latest.get("resp_rate"),
+            "temperature": latest.get("temperature"),
+            "steps": latest.get("steps"),
+            "battery": latest.get("battery"),
+            "behavior": latest.get("behavior"),
+            "gps_lat": latest.get("gps_lat"),
+            "gps_lng": latest.get("gps_lng"),
+            "event": latest.get("event"),
+            "event_phase": latest.get("event_phase"),
+        },
+        "heart_rate_series": {"unit": "bpm", "count": len(hr_points), "points": hr_points},
+        "respiration_series": {"unit": "bpm", "count": len(rr_points), "points": rr_points},
+        "temperature_series": {"unit": "°C", "count": len(temp_points), "points": temp_points},
+        "recent_events": [{"ts": r.get("timestamp"), "type": r.get("event"),
+                           "phase": r.get("event_phase"), "behavior": r.get("behavior")}
+                          for r in event_rows],
+        "generated_at": now_iso(),
+    })

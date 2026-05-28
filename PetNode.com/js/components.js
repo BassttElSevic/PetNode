@@ -1,407 +1,258 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // ==========================================
-    // State
-    // ==========================================
-    let adminActive = false;
-    let activeAccordionIndex = -1;
-    let isCurtainAnimating = false;
-    let indicatorData = [];
-    let realtimeDevices = [];
+    var adminActive = false;
+    var devices = [];
+    var stats = null;
+    var deviceDetails = {};
+    var openDevice = null;
+    var openSection = 'devices'; // 'overview' | 'devices'
+    var refreshTimer = null;
+    var REFRESH = 5000;
 
-    // ==========================================
-    // DOM References
-    // ==========================================
-    const overlay        = document.getElementById('admin-overlay');
-    const toggleInput    = document.getElementById('admin-toggle-input');
-    const closeBtn       = document.getElementById('admin-close-btn');
-    const curtain        = document.getElementById('map-curtain');
-    const mapHeat        = document.getElementById('map-heat');
-    const briefingBody   = document.getElementById('briefing-body');
-    const briefingTextEl = briefingBody ? briefingBody.querySelector('.briefing-text') : null;
-    const accordion      = document.getElementById('accordion');
-    const consoleStatus  = document.getElementById('console-status');
-    const body           = document.body;
+    var overlay       = document.getElementById('admin-overlay');
+    var toggleInput   = document.getElementById('admin-toggle-input');
+    var closeBtn      = document.getElementById('admin-close-btn');
+    var accordion     = document.getElementById('accordion');
+    var consoleStatus = document.getElementById('console-status');
+    var briefingBody  = document.getElementById('briefing-body');
+    var briefingTextEl = briefingBody ? briefingBody.querySelector('.briefing-text') : null;
+    var body          = document.body;
 
-    // ==========================================
-    // GPS → Map coordinate conversion
-    // ==========================================
-    function gpsToMapPercent(lat, lng) {
-        const x = ((lng - 106.3) / 0.6) * 95.83 + 2.5;
-        const y = ((29.7 - lat) / 0.4) * 97 + 1;
-        return {
-            x: Math.max(0, Math.min(100, x)),
-            y: Math.max(0, Math.min(100, y))
-        };
+    function fmtTime(ts) {
+        if (!ts) return '--';
+        return ts.replace('T', ' ').substring(11, 19);
+    }
+    function bLabel(b) {
+        var m = { sleeping: '睡眠', resting: '休息', walking: '行走', running: '奔跑' };
+        return m[b] || b || '--';
+    }
+    function bEmoji(b) {
+        var m = { sleeping: '😴', resting: '🛌', walking: '🚶', running: '🏃' };
+        return m[b] || '🐕';
+    }
+    function hrClr(hr) {
+        if (!hr) return '#888';
+        if (hr > 140) return '#ff3b5c';
+        if (hr < 60) return '#ff9100';
+        return '#00e676';
     }
 
-    function generateDeviceHeatSpots(devices) {
-        if (!devices || devices.length === 0) return [];
-        return devices
-            .filter(function(d) { return d.gps_lat && d.gps_lng; })
-            .map(function(d) {
-                var pos = gpsToMapPercent(d.gps_lat, d.gps_lng);
-                return { x: pos.x, y: pos.y, r: 55 };
-            });
+    function apiFetch(path) {
+        var h = { 'Content-Type': 'application/json' };
+        var t = localStorage.getItem('petnode_admin_token');
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        return fetch('http://127.0.0.1:5000' + path, { headers: h })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return d.code === 0 ? d.data : Promise.reject(new Error(d.message)); });
     }
 
-    // ==========================================
-    // Build indicators from API data
-    // ==========================================
-    function buildIndicatorData(stats, devices) {
-        var indicators = [];
-        var total = stats.sample_count || 1;
+    // ── Render ──
+    function render() {
+        if (!accordion) return;
+        var h = '';
 
-        // ── Indicator 1: 心率健康分布 ──
-        var hrDist = stats.heart_rate_distribution || {};
-        var hrTotal = hrDist.normal_60_140 + hrDist.tachycardia_over_140 + hrDist.low_under_60 + hrDist.critical || 1;
-        var hrNormalPct  = Math.round(hrDist.normal_60_140 / hrTotal * 100);
-        var hrTachyPct   = Math.round(hrDist.tachycardia_over_140 / hrTotal * 100);
-        var hrLowPct     = Math.round(hrDist.low_under_60 / hrTotal * 100);
-        var hrCritPct    = Math.round(hrDist.critical / hrTotal * 100);
+        // ── Section switcher ──
+        h += '<div class="section-tabs">';
+        h += '<button class="section-tab' + (openSection === 'overview' ? ' active' : '') + '" data-section="overview">📊 总览</button>';
+        h += '<button class="section-tab' + (openSection === 'devices' ? ' active' : '') + '" data-section="devices">🐕 设备 (' + devices.length + ')</button>';
+        h += '</div>';
 
-        var hrBriefing = '实时心率监测显示，当前在线设备中 <em>' + hrNormalPct + '%</em> 的犬只心率处于正常区间（60–140 bpm），';
-        hrBriefing += '<em>' + hrTachyPct + '%</em> 存在偶发性心动过速，';
-        hrBriefing += '<em>' + hrLowPct + '%</em> 表现为静息心率偏低。';
-        if (hrCritPct > 0) {
-            hrBriefing += '系统已标记 <em>' + hrDist.critical + '</em> 例异常心率预警，建议及时关注。';
-        }
-        hrBriefing += ' 数据基于最近 ' + stats.sample_count + ' 条上报记录。';
+        // ── Overview section ──
+        if (openSection === 'overview') {
+            if (stats) {
+                var hrDist = stats.heart_rate_distribution || {};
+                var hrTotal = hrDist.normal_60_140 + hrDist.tachycardia_over_140 + hrDist.low_under_60 + hrDist.critical || 1;
+                var behDist = stats.behavior_distribution || {};
+                var behTotal = (behDist.sleeping || 0) + (behDist.resting || 0) + (behDist.walking || 0) + (behDist.running || 0) || 1;
+                var avgs = stats.averages || {};
+                var behAvgHr = stats.behavior_avg_hr || {};
 
-        indicators.push({
-            title: '狗狗心率健康分布',
-            heatColor: '#ff3b5c',
-            briefing: hrBriefing,
-            metrics: [
-                { label: '正常 (60-140 bpm)', value: hrNormalPct + '%',  pct: hrNormalPct, color: '#00e676' },
-                { label: '心动过速 (>140)',   value: hrTachyPct + '%',   pct: hrTachyPct,  color: '#ff9100' },
-                { label: '心率偏低 (<60)',    value: hrLowPct + '%',     pct: hrLowPct,    color: '#ffc400' },
-                { label: '异常预警',          value: hrCritPct + '%',    pct: Math.max(hrCritPct, 10), color: '#ff3b5c' }
-            ],
-            heatSpots: generateDeviceHeatSpots(devices)
-        });
+                var indicators = [
+                    {
+                        title: '心率健康分布',
+                        color: '#ff3b5c',
+                        items: [
+                            { label: '正常 (60-140)', val: hrDist.normal_60_140, pct: Math.round(hrDist.normal_60_140 / hrTotal * 100), clr: '#00e676' },
+                            { label: '心动过速 (>140)', val: hrDist.tachycardia_over_140, pct: Math.round(hrDist.tachycardia_over_140 / hrTotal * 100), clr: '#ff9100' },
+                            { label: '心率偏低 (<60)', val: hrDist.low_under_60, pct: Math.round(hrDist.low_under_60 / hrTotal * 100), clr: '#ffc400' },
+                            { label: '异常预警', val: hrDist.critical, pct: Math.round(hrDist.critical / hrTotal * 100), clr: '#ff3b5c' }
+                        ]
+                    },
+                    {
+                        title: '行为状态分布',
+                        color: '#ff9100',
+                        items: [
+                            { label: '睡眠', val: behDist.sleeping || 0, pct: Math.round((behDist.sleeping || 0) / behTotal * 100), clr: '#7c4dff' },
+                            { label: '休息', val: behDist.resting || 0, pct: Math.round((behDist.resting || 0) / behTotal * 100), clr: '#448aff' },
+                            { label: '行走', val: behDist.walking || 0, pct: Math.round((behDist.walking || 0) / behTotal * 100), clr: '#00e5ff' },
+                            { label: '奔跑', val: behDist.running || 0, pct: Math.round((behDist.running || 0) / behTotal * 100), clr: '#ff9100' }
+                        ]
+                    }
+                ];
 
-        // ── Indicator 2: 行为状态分布 ──
-        var behDist = stats.behavior_distribution || {};
-        var behTotal = (behDist.sleeping || 0) + (behDist.resting || 0) + (behDist.walking || 0) + (behDist.running || 0) || 1;
-        var sleepPct  = Math.round((behDist.sleeping || 0) / behTotal * 100);
-        var restPct   = Math.round((behDist.resting || 0) / behTotal * 100);
-        var walkPct   = Math.round((behDist.walking || 0) / behTotal * 100);
-        var runPct    = Math.round((behDist.running || 0) / behTotal * 100);
+                // Behavior avg HR
+                var behNames = { sleeping: '睡眠', resting: '休息', walking: '行走', running: '奔跑' };
+                var behColors = { sleeping: '#7c4dff', resting: '#448aff', walking: '#00e5ff', running: '#ff9100' };
+                var behHrItems = [];
+                var maxHr = 60;
+                for (var k in behAvgHr) { if (behAvgHr[k].avg_hr > maxHr) maxHr = behAvgHr[k].avg_hr; }
+                for (var kk in behAvgHr) {
+                    behHrItems.push({
+                        label: behNames[kk] || kk,
+                        val: behAvgHr[kk].avg_hr.toFixed(1) + ' bpm',
+                        pct: Math.round(behAvgHr[kk].avg_hr / maxHr * 100),
+                        clr: behColors[kk] || '#00e5ff'
+                    });
+                }
+                indicators.push({ title: '各行为平均心率', color: '#00e5ff', items: behHrItems });
 
-        var activePct = walkPct + runPct;
-        var behBriefing = '行为监测统计表明，当前犬只处于活跃状态（行走+奔跑）的比例为 <em>' + activePct + '%</em>，';
-        behBriefing += '休息/睡眠占比 <em>' + (sleepPct + restPct) + '%</em>。';
-        if (activePct < 20) {
-            behBriefing += '活跃度偏低，提示部分宠物可能存在运动不足。';
-        } else if (activePct > 50) {
-            behBriefing += '活跃度较高，显示宠物运动状态良好。';
-        }
-        behBriefing += ' 基于最近 ' + stats.sample_count + ' 条记录统计。';
+                // Summary
+                indicators.push({
+                    title: '设备运行总览',
+                    color: '#00c8ff',
+                    items: [
+                        { label: '活跃设备', val: (stats.active_devices || 0) + ' 台', pct: Math.min((stats.active_devices || 0) * 10, 100), clr: '#00c8ff' },
+                        { label: '平均心率', val: (avgs.heart_rate_bpm || '--') + ' bpm', pct: Math.round((avgs.heart_rate_bpm || 60) / 200 * 100), clr: '#ff3b5c' },
+                        { label: '平均呼吸', val: (avgs.resp_rate_bpm || '--') + ' 次/分', pct: Math.round((avgs.resp_rate_bpm || 15) / 40 * 100), clr: '#00e676' },
+                        { label: '平均体温', val: (avgs.temperature_c || '--') + '°C', pct: Math.round((avgs.temperature_c || 38) / 42 * 100), clr: '#ff9100' }
+                    ]
+                });
 
-        indicators.push({
-            title: '狗狗行为状态分布',
-            heatColor: '#ff9100',
-            briefing: behBriefing,
-            metrics: [
-                { label: '睡眠 (sleeping)', value: sleepPct + '%', pct: sleepPct, color: '#7c4dff' },
-                { label: '休息 (resting)',  value: restPct + '%',  pct: restPct,  color: '#448aff' },
-                { label: '行走 (walking)',  value: walkPct + '%',  pct: walkPct,  color: '#00e5ff' },
-                { label: '奔跑 (running)',  value: runPct + '%',   pct: runPct,   color: '#ff9100' }
-            ],
-            heatSpots: generateDeviceHeatSpots(devices)
-        });
+                indicators.forEach(function(ind) {
+                    h += '<div class="overview-card">';
+                    h += '<div class="overview-title" style="border-left:3px solid ' + ind.color + '">' + ind.title + '</div>';
+                    ind.items.forEach(function(m) {
+                        h += '<div class="metric-row">';
+                        h += '<div class="metric-header"><span class="metric-label">' + m.label + '</span><span class="metric-value">' + m.val + '</span></div>';
+                        h += '<div class="metric-bar"><div class="metric-fill" style="background:' + m.clr + ';width:' + Math.max(m.pct, 3) + '%"></div></div>';
+                        h += '</div>';
+                    });
+                    h += '</div>';
+                });
 
-        // ── Indicator 3: 各行为平均心率 ──
-        var behAvgHr = stats.behavior_avg_hr || {};
-        var behHrMetrics = [];
-        var behNames = { sleeping: '睡眠时', resting: '休息时', walking: '行走时', running: '奔跑时' };
-        var behColors = { sleeping: '#7c4dff', resting: '#448aff', walking: '#00e5ff', running: '#ff9100' };
-
-        var maxHr = 60;
-        for (var b in behAvgHr) {
-            if (behAvgHr[b].avg_hr > maxHr) maxHr = behAvgHr[b].avg_hr;
-        }
-        if (maxHr < 60) maxHr = 60;
-
-        for (var key in behAvgHr) {
-            var item = behAvgHr[key];
-            var pctVal = Math.round(item.avg_hr / maxHr * 100);
-            behHrMetrics.push({
-                label: behNames[key] || key,
-                value: item.avg_hr + ' bpm',
-                pct: pctVal,
-                color: behColors[key] || '#00e5ff'
-            });
-        }
-
-        var behHrBriefing = '不同行为状态下的平均心率对比：';
-        for (var k in behAvgHr) {
-            behHrBriefing += (behNames[k] || k) + '平均心率 <em>' + behAvgHr[k].avg_hr + ' bpm</em>（' + behAvgHr[k].count + ' 条记录）；';
-        }
-        behHrBriefing += '此数据可用于评估宠物在不同活动强度下的心肺功能表现。';
-
-        indicators.push({
-            title: '各行为状态平均心率',
-            heatColor: '#00e5ff',
-            briefing: behHrBriefing,
-            metrics: behHrMetrics,
-            heatSpots: generateDeviceHeatSpots(devices)
-        });
-
-        // ── Indicator 4: 实时设备总览 ──
-        var avg = stats.averages || {};
-        var devCount = devices ? devices.length : (stats.active_devices || 0);
-
-        var overviewBriefing = '当前共有 <em>' + devCount + '</em> 台活跃设备在线，';
-        overviewBriefing += '最近 ' + stats.sample_count + ' 条数据显示：';
-        overviewBriefing += '平均心率 <em>' + (avg.heart_rate_bpm || '--') + ' bpm</em>，';
-        overviewBriefing += '平均呼吸率 <em>' + (avg.resp_rate_bpm || '--') + ' 次/分钟</em>，';
-        overviewBriefing += '平均体温 <em>' + (avg.temperature_c || '--') + '°C</em>，';
-        overviewBriefing += '平均步数 <em>' + (avg.steps || '--') + ' 步</em>。';
-        if (stats.active_events > 0) {
-            overviewBriefing += '当前有 <em>' + stats.active_events + '</em> 个活跃事件需要关注。';
-        } else {
-            overviewBriefing += '当前无活跃异常事件。';
-        }
-
-        var devMetrics = [
-            { label: '活跃设备数', value: devCount + ' 台', pct: Math.min(devCount * 10, 100), color: '#00c8ff' },
-            { label: '平均心率',   value: (avg.heart_rate_bpm || '--') + ' bpm', pct: Math.round((avg.heart_rate_bpm || 60) / 200 * 100), color: '#ff3b5c' },
-            { label: '平均呼吸率', value: (avg.resp_rate_bpm || '--') + ' 次/分', pct: Math.round((avg.resp_rate_bpm || 15) / 40 * 100), color: '#00e676' },
-            { label: '平均体温',   value: (avg.temperature_c || '--') + '°C', pct: Math.round((avg.temperature_c || 38) / 42 * 100), color: '#ff9100' }
-        ];
-
-        indicators.push({
-            title: '实时设备运行总览',
-            heatColor: '#00c8ff',
-            briefing: overviewBriefing,
-            metrics: devMetrics,
-            heatSpots: generateDeviceHeatSpots(devices)
-        });
-
-        return indicators;
-    }
-
-    // ==========================================
-    // Build Accordion
-    // ==========================================
-    function buildAccordion() {
-        accordion.innerHTML = '';
-        indicatorData.forEach(function(item, i) {
-            var el = document.createElement('div');
-            el.className = 'accordion-item';
-            el.innerHTML = [
-                '<button class="accordion-trigger" data-index="' + i + '">',
-                    '<span class="accordion-marker"></span>',
-                    '<span class="accordion-title">' + item.title + '</span>',
-                    '<span class="accordion-arrow"></span>',
-                '</button>',
-                '<div class="accordion-panel">',
-                    '<div class="accordion-content">',
-                        item.metrics.map(function(m) {
-                            return [
-                                '<div class="metric-row">',
-                                    '<div class="metric-header">',
-                                        '<span class="metric-label">' + m.label + '</span>',
-                                        '<span class="metric-value">' + m.value + '</span>',
-                                    '</div>',
-                                    '<div class="metric-bar">',
-                                        '<div class="metric-fill" style="background:' + m.color + ';width:0"></div>',
-                                    '</div>',
-                                '</div>'
-                            ].join('');
-                        }).join(''),
-                    '</div>',
-                '</div>'
-            ].join('');
-            accordion.appendChild(el);
-        });
-    }
-
-    // ==========================================
-    // Heat Spots
-    // ==========================================
-    function clearHeatSpots() {
-        var spots = mapHeat.querySelectorAll('.heat-spot, .heat-dot');
-        for (var i = 0; i < spots.length; i++) {
-            spots[i].remove();
-        }
-    }
-
-    function renderHeatSpots(spots, color) {
-        clearHeatSpots();
-        if (!spots || spots.length === 0) return;
-
-        spots.forEach(function(s) {
-            var spot = document.createElement('div');
-            spot.className = 'heat-spot';
-            spot.style.left = s.x + '%';
-            spot.style.top = s.y + '%';
-            spot.style.width = s.r + 'px';
-            spot.style.height = s.r + 'px';
-            spot.style.marginLeft = -(s.r / 2) + 'px';
-            spot.style.marginTop = -(s.r / 2) + 'px';
-            spot.style.background = 'radial-gradient(circle, ' + color + ' 0%, transparent 70%)';
-            mapHeat.appendChild(spot);
-        });
-
-        // Scatter density dots
-        var seed = activeAccordionIndex * 137 + 42;
-        var rng = mulberry32(seed);
-        for (var i = 0; i < 50; i++) {
-            var x = 15 + rng() * 70;
-            var y = 15 + rng() * 70;
-            var dot = document.createElement('div');
-            dot.className = 'heat-dot';
-            dot.style.left = x + '%';
-            dot.style.top = y + '%';
-            dot.style.background = color;
-            dot.style.boxShadow = '0 0 4px ' + color;
-            dot.style.transitionDelay = (rng() * 0.3).toFixed(2) + 's';
-            mapHeat.appendChild(dot);
-        }
-    }
-
-    // Deterministic PRNG
-    function mulberry32(a) {
-        return function() {
-            a |= 0; a = a + 0x6D2B79F5 | 0;
-            var t = Math.imul(a ^ a >>> 15, 1 | a);
-            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-            return ((t ^ t >>> 14) >>> 0) / 4294967296;
-        };
-    }
-
-    // ==========================================
-    // Curtain Animation
-    // ==========================================
-    function animateCurtain(onCovered) {
-        if (isCurtainAnimating) return;
-        isCurtainAnimating = true;
-
-        curtain.classList.remove('animating');
-        curtain.style.transform = 'translateY(-100%)';
-        void curtain.offsetHeight;
-
-        curtain.classList.add('animating');
-        curtain.style.transform = 'translateY(0%)';
-
-        setTimeout(function() {
-            if (onCovered) onCovered();
-            curtain.style.transform = 'translateY(100%)';
-        }, 350);
-
-        setTimeout(function() {
-            curtain.classList.remove('animating');
-            curtain.style.transform = 'translateY(-100%)';
-            isCurtainAnimating = false;
-        }, 750);
-    }
-
-    // ==========================================
-    // Briefing Fade
-    // ==========================================
-    function updateBriefing(html) {
-        if (!briefingTextEl) return;
-        briefingTextEl.classList.add('fading');
-        setTimeout(function() {
-            briefingTextEl.innerHTML = html;
-            briefingTextEl.classList.remove('fading');
-        }, 260);
-    }
-
-    // ==========================================
-    // Accordion Interaction
-    // ==========================================
-    function setActiveAccordion(index) {
-        var items = accordion.querySelectorAll('.accordion-item');
-        var wasSame = activeAccordionIndex === index;
-
-        for (var i = 0; i < items.length; i++) {
-            items[i].classList.remove('active');
-            var fill = items[i].querySelector('.metric-fill');
-            if (fill) fill.style.width = '0';
-        }
-
-        if (wasSame) {
-            activeAccordionIndex = -1;
-            animateCurtain(function() {
-                mapHeat.classList.remove('active');
-            });
-            updateBriefing('请选择右侧数据指标以查看详细分析简报。');
-            if (consoleStatus) consoleStatus.textContent = '系统就绪';
-            return;
-        }
-
-        activeAccordionIndex = index;
-        var activeItem = items[index];
-        activeItem.classList.add('active');
-
-        var data = indicatorData[index];
-        setTimeout(function() {
-            var fills = activeItem.querySelectorAll('.metric-fill');
-            for (var i = 0; i < fills.length; i++) {
-                if (data.metrics[i]) fills[i].style.width = data.metrics[i].pct + '%';
+                h += '<div class="overview-footer">样本数: ' + stats.sample_count + ' · 事件: ' + (stats.active_events || 0) + ' · ' + (stats.generated_at || '').substring(11, 19);
+                h += '</div>';
+            } else {
+                h += '<div class="device-empty">加载总览数据中...</div>';
             }
-        }, 100);
+        }
 
-        animateCurtain(function() {
-            renderHeatSpots(data.heatSpots, data.heatColor);
-            mapHeat.classList.add('active');
+        // ── Devices section ──
+        if (openSection === 'devices') {
+            if (devices.length === 0) {
+                h += '<div class="device-empty">暂无在线设备</div>';
+            } else {
+                devices.forEach(function(d, i) {
+                    var hr = d.heart_rate || 0;
+                    var detail = deviceDetails[d.device_id];
+                    var open = openDevice === d.device_id;
+                    var name = d.pet_name || ('设备 ' + d.device_id.substring(0, 8));
+
+                    h += '<div class="device-card' + (open ? ' expanded' : '') + '">';
+                    h += '<div class="device-card-header" data-device="' + d.device_id + '">';
+                    h += '<div class="device-card-main">';
+                    h += '<span class="device-emoji">' + bEmoji(d.behavior) + '</span>';
+                    h += '<div class="device-info"><span class="device-name">' + name + '</span>';
+                    h += '<span class="device-id">' + d.device_id.substring(0, 12) + '</span></div>';
+                    h += '<span class="device-expand-arrow">' + (open ? '▼' : '▶') + '</span>';
+                    h += '</div>';
+                    h += '<div class="device-vitals">';
+                    h += '<div class="vital-item"><span class="vital-value" style="color:' + hrClr(hr) + '">' + (hr || '--') + '</span><span class="vital-unit">bpm</span></div>';
+                    h += '<div class="vital-item"><span class="vital-value">' + ((d.temperature || 0).toFixed ? d.temperature.toFixed(1) : (d.temperature || '--')) + '</span><span class="vital-unit">°C</span></div>';
+                    h += '<div class="vital-item"><span class="vital-value">' + bLabel(d.behavior) + '</span></div>';
+                    h += '<div class="vital-item"><span class="vital-value">🔋' + (d.battery || '--') + '%</span></div>';
+                    h += '</div>';
+                    h += '</div>';
+
+                    if (open) {
+                        if (detail && detail.latest) {
+                            var l = detail.latest;
+                            h += '<div class="device-detail">';
+                            h += '<div class="detail-row">';
+                            h += '<div class="detail-item"><span class="detail-label">心率</span><span class="detail-val" style="color:' + hrClr(l.heart_rate) + '">' + (l.heart_rate || '--') + ' bpm</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">呼吸</span><span class="detail-val">' + (l.resp_rate || '--') + ' 次/分</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">体温</span><span class="detail-val">' + ((l.temperature || 0).toFixed ? l.temperature.toFixed(1) : '--') + ' °C</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">步数</span><span class="detail-val">' + (l.steps || '--') + '</span></div>';
+                            h += '</div><div class="detail-row">';
+                            h += '<div class="detail-item"><span class="detail-label">行为</span><span class="detail-val">' + bEmoji(l.behavior) + ' ' + bLabel(l.behavior) + '</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">GPS</span><span class="detail-val">' + (l.gps_lat ? l.gps_lat.toFixed(4) : '--') + ', ' + (l.gps_lng ? l.gps_lng.toFixed(4) : '--') + '</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">更新</span><span class="detail-val">' + fmtTime(l.timestamp) + '</span></div>';
+                            h += '<div class="detail-item"><span class="detail-label">事件</span><span class="detail-val">' + (l.event ? ('⚠ ' + l.event + ' ' + l.event_phase) : '无') + '</span></div>';
+                            h += '</div>';
+                        } else {
+                            h += '<div class="device-detail"><div class="detail-loading">加载中...</div></div>';
+                        }
+                    }
+                    h += '</div>';
+                });
+            }
+        }
+
+        h += '<div class="refresh-bar"><span class="refresh-text">⏱ ' + (REFRESH / 1000) + 's 刷新</span><button class="refresh-btn" id="refresh-btn">刷新</button></div>';
+        accordion.innerHTML = h;
+
+        // Events
+        accordion.querySelectorAll('.section-tab').forEach(function(b) {
+            b.addEventListener('click', function() { openSection = b.dataset.section; openDevice = null; render(); });
         });
-
-        updateBriefing(data.briefing);
-        if (consoleStatus) consoleStatus.textContent = '指标: ' + data.title;
+        accordion.querySelectorAll('.device-card-header').forEach(function(hdr) {
+            hdr.addEventListener('click', function() {
+                var did = hdr.dataset.device;
+                if (openDevice === did) { openDevice = null; render(); return; }
+                openDevice = did;
+                if (!deviceDetails[did]) {
+                    apiFetch('/api/v1/admin/devices/' + encodeURIComponent(did) + '/detail')
+                        .then(function(data) { deviceDetails[did] = data; render(); })
+                        .catch(function() { deviceDetails[did] = { latest: null }; render(); });
+                    return;
+                }
+                render();
+            });
+        });
+        var rb = document.getElementById('refresh-btn');
+        if (rb) rb.addEventListener('click', loadAll);
     }
 
-    function attachAccordionEvents() {
-        accordion.addEventListener('click', function(e) {
-            var trigger = e.target.closest('.accordion-trigger');
-            if (!trigger) return;
-            var index = parseInt(trigger.getAttribute('data-index'), 10);
-            setActiveAccordion(index);
+    function loadAll() {
+        if (consoleStatus) consoleStatus.textContent = '刷新中...';
+        var p1 = apiFetch('/api/v1/admin/stats').then(function(d) { stats = d; }).catch(function() {});
+        var p2 = apiFetch('/api/v1/admin/devices/realtime').then(function(d) {
+            devices = d.devices || [];
+            var ids = {};
+            devices.forEach(function(x) { ids[x.device_id] = true; });
+            Object.keys(deviceDetails).forEach(function(k) { if (!ids[k]) delete deviceDetails[k]; });
+            if (openDevice && !ids[openDevice]) openDevice = null;
+        }).catch(function() {});
+        Promise.all([p1, p2]).then(function() {
+            if (consoleStatus) consoleStatus.textContent = '就绪 · ' + devices.length + ' 设备 · ' + (stats ? stats.sample_count : 0) + ' 样本';
+            render();
+            updateBriefing();
+        }).catch(function() {
+            if (consoleStatus) consoleStatus.textContent = '连接失败';
+            render();
         });
     }
 
-    // ==========================================
-    // Admin Overlay Toggle
-    // ==========================================
+    function updateBriefing() {
+        if (!briefingTextEl) return;
+        if (devices.length === 0) { briefingTextEl.textContent = '当前无在线设备。'; return; }
+        var t = '<em>' + devices.length + '</em> 台设备在线：';
+        devices.forEach(function(d, i) {
+            var name = d.pet_name || ('设备' + (i + 1));
+            t += '<em>' + name + '</em> (' + bLabel(d.behavior) + ', ' + (d.heart_rate || '--') + ' bpm)';
+            t += i < devices.length - 1 ? '；' : '。';
+        });
+        briefingTextEl.classList.add('fading');
+        setTimeout(function() { briefingTextEl.innerHTML = t; briefingTextEl.classList.remove('fading'); }, 260);
+    }
+
     function openAdmin() {
         adminActive = true;
         toggleInput.checked = true;
         overlay.classList.add('active');
         body.style.overflow = 'hidden';
-
-        if (consoleStatus) consoleStatus.textContent = '正在加载数据...';
-
-        Promise.all([
-            Api.getStats().catch(function() { return null; }),
-            Api.getDevicesRealtime().catch(function() { return null; })
-        ]).then(function(results) {
-            var stats = results[0];
-            var devicesResp = results[1];
-
-            if (!stats) {
-                if (consoleStatus) consoleStatus.textContent = '数据加载失败，请检查后端服务';
-                updateBriefing('无法连接到后端服务器，请确认后端已启动。<br>默认地址：' + Api.BASE_URL);
-                return;
-            }
-
-            realtimeDevices = (devicesResp && devicesResp.devices) ? devicesResp.devices : [];
-            indicatorData = buildIndicatorData(stats, realtimeDevices);
-            buildAccordion();
-            attachAccordionEvents();
-            activeAccordionIndex = -1;
-
-            if (consoleStatus) {
-                consoleStatus.textContent = '系统就绪 · ' + (stats.active_devices || 0) + ' 台设备在线';
-            }
-            updateBriefing('数据加载成功。请选择右侧数据指标以查看详细分析简报。');
-        }).catch(function(err) {
-            if (consoleStatus) consoleStatus.textContent = '数据加载失败: ' + (err.message || '未知错误');
-            updateBriefing('数据加载失败: ' + (err.message || '未知错误'));
-        });
+        loadAll();
+        refreshTimer = setInterval(loadAll, REFRESH);
     }
 
     function closeAdmin() {
@@ -409,45 +260,19 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleInput.checked = false;
         overlay.classList.remove('active');
         body.style.overflow = '';
-
-        var items = accordion.querySelectorAll('.accordion-item');
-        for (var i = 0; i < items.length; i++) {
-            items[i].classList.remove('active');
-            var fill = items[i].querySelector('.metric-fill');
-            if (fill) fill.style.width = '0';
-        }
-        activeAccordionIndex = -1;
-        mapHeat.classList.remove('active');
+        if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+        openDevice = null; openSection = 'devices'; devices = []; stats = null; deviceDetails = {};
+        if (accordion) accordion.innerHTML = '';
         if (consoleStatus) consoleStatus.textContent = '系统就绪';
         if (briefingTextEl) briefingTextEl.textContent = '请选择右侧数据指标以查看详细分析简报。';
-        clearHeatSpots();
     }
 
-    // Admin toggle — always check token at toggle time
     toggleInput.addEventListener('change', function() {
         if (toggleInput.checked) {
-            if (!Api.isLoggedIn()) {
-                alert('请先登录管理员账号');
-                toggleInput.checked = false;
-                return;
-            }
+            if (!localStorage.getItem('petnode_admin_token')) { alert('请先登录管理员账号'); toggleInput.checked = false; return; }
             openAdmin();
-        } else {
-            closeAdmin();
-        }
+        } else { closeAdmin(); }
     });
-
     closeBtn.addEventListener('click', closeAdmin);
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && adminActive) {
-            closeAdmin();
-        }
-    });
-
-    // ==========================================
-    // Init
-    // ==========================================
-    // Accordion built on-demand when admin opens with real API data.
-    // If already logged in, user can toggle admin switch to load data.
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && adminActive) closeAdmin(); });
 });
