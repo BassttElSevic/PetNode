@@ -158,40 +158,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Admin login — 调用后端 API
+    // Admin login
     if (adminBtn) {
-        adminBtn.addEventListener('click', async () => {
+        adminBtn.addEventListener('click', () => {
             const u = adminUserInput ? adminUserInput.value.trim() : '';
             const p = adminPassInput ? adminPassInput.value.trim() : '';
-
-            if (!u || !p) {
-                alert('请输入用户名和密码');
-                return;
-            }
-
-            adminBtn.disabled = true;
-            adminBtn.textContent = '登录中...';
-
-            try {
-                const data = await Api.adminLogin(u, p);
-                alert('登录成功');
+            if (u === 'Test_Endmin' && p === 'Endfiled_Best') {
+                alert('Login Successful');
                 document.body.classList.add('admin-mode-active');
                 closeModal();
-                // 如果仪表盘已打开，触发数据刷新
-                if (typeof refreshDashboard === 'function') {
-                    refreshDashboard();
-                }
-            } catch (err) {
-                alert(err.message || '登录失败，请检查用户名密码或服务器连接');
-            } finally {
-                adminBtn.disabled = false;
-                adminBtn.textContent = '管理员登录';
+            } else {
+                alert('Invalid Credentials');
             }
         });
-    }
-
-    // 页面加载时：如果已有 token，自动恢复登录态
-    if (Api.isLoggedIn()) {
-        document.body.classList.add('admin-mode-active');
     }
 });
