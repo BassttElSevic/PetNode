@@ -262,6 +262,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="HMAC 密钥，用于请求体防篡改签名（优先读环境变量 HMAC_KEY）",
     )
     parser.add_argument(
+        "--device-ids", type=str, default=None,
+        help="逗号分隔的设备 ID 列表，如 'abc123,def456'。指定后每只狗使用固定 ID 而非随机生成。",
+    )
+    parser.add_argument(
         "--log-level", type=str, default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="日志级别（默认 INFO）",
@@ -280,6 +284,7 @@ def run(
     seed: int | None = None,
     output_dir: str | Path | None = None,
     num_groups: int = 1,
+    device_ids: str | None = None,
     # api_url: str = "http://172.28.69.242:5000/api/data",
     api_url: str = os.environ.get("API_URL", "http://flask-server:5000/api/data"),
     api_key: str | None = None,
@@ -326,15 +331,22 @@ def run(
     out_path.mkdir(parents=True, exist_ok=True)
 
 
+    # ── 解析固定设备 ID 列表 ──
+    device_id_list: list[str] = []
+    if device_ids:
+        device_id_list = [did.strip() for did in device_ids.split(",") if did.strip()]
+
     # ── 创建项圈（SmartCollar 实例）──
     # 每只狗使用 (seed + i) 作为随机种子，确保不同狗有不同的随机序列但整体可复现
     # record 身份只由 device_id 表达；num_groups 仅用于状态展示等元数据
     collars: list[SmartCollar] = []
     for i in range(num_dogs):
         dog_seed = (seed + i) if seed is not None else None
+        dog_id = device_id_list[i] if i < len(device_id_list) else None
         collar = SmartCollar(
             tick_interval=timedelta(minutes=tick_minutes),
             seed=dog_seed,
+            device_id=dog_id,
         )
         collars.append(collar)
 
@@ -538,9 +550,10 @@ def main(argv: list[str] | None = None) -> None:
         seed=args.seed,
         output_dir=args.output_dir,
         num_groups=args.groups,
-        api_url=args.api_url,                        # ← 🆕 传入 Flask API 地址
-        api_key=args.api_key,                        # ← 🆕 传入 API Key
-        hmac_key=args.hmac_key,                      # ← 🆕 传入 HMAC 密钥
+        device_ids=args.device_ids,                    # 🆕 固定设备 ID 列表
+        api_url=args.api_url,
+        api_key=args.api_key,
+        hmac_key=args.hmac_key,
         export_backend=args.export_backend,
     )
 

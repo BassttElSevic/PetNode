@@ -56,7 +56,7 @@ def _latest_record(
     return db["received_records"].find_one(
         {"device_id": pet_id},
         proj,
-        sort=[("timestamp", -1)],
+        sort=[("_id", -1)],
     )
 
 
@@ -179,7 +179,7 @@ def get_latest_respiration(db, user_id: str, pet_id: str) -> dict:
     record = db["received_records"].find_one(
         {"device_id": pet_id, "resp_rate": {"$exists": True}},
         {"_id": 0, "timestamp": 1, "resp_rate": 1},
-        sort=[("timestamp", -1)],
+        sort=[("_id", -1)],
     )
     if not record:
         raise LookupError(f"宠物 {pet_id} 暂无呼吸频率数据")
@@ -243,7 +243,7 @@ def get_respiration_series(
         db["received_records"].find(
             query,
             {"_id": 0, "timestamp": 1, "resp_rate": 1},
-            sort=[("timestamp", -1)],
+            sort=[("_id", -1)],
             limit=limit,
         )
     )
@@ -292,7 +292,7 @@ def get_latest_heart_rate(db, user_id: str, pet_id: str) -> dict:
     record = db["received_records"].find_one(
         {"device_id": pet_id, "heart_rate": {"$exists": True}},
         {"_id": 0, "timestamp": 1, "heart_rate": 1},
-        sort=[("timestamp", -1)],
+        sort=[("_id", -1)],
     )
     if not record:
         raise LookupError(f"宠物 {pet_id} 暂无心率数据")
@@ -356,7 +356,7 @@ def get_heart_rate_series(
         db["received_records"].find(
             query,
             {"_id": 0, "timestamp": 1, "heart_rate": 1},
-            sort=[("timestamp", -1)],
+            sort=[("_id", -1)],
             limit=limit,
         )
     )
@@ -495,7 +495,7 @@ def get_temperature_series(
         db["received_records"].find(
             query,
             {"_id": 0, "timestamp": 1, "temperature": 1},
-            sort=[("timestamp", -1)],
+            sort=[("_id", -1)],
             limit=limit,
         )
     )
@@ -514,7 +514,7 @@ def get_latest_location(db, user_id: str, pet_id: str) -> dict:
     record = db["received_records"].find_one(
         {"device_id": pet_id, "gps_lat": {"$exists": True}, "gps_lng": {"$exists": True}},
         {"_id": 0, "timestamp": 1, "gps_lat": 1, "gps_lng": 1},
-        sort=[("timestamp", -1)],
+        sort=[("_id", -1)],
     )
     if not record:
         raise LookupError(f"宠物 {pet_id} 暂无定位数据")
