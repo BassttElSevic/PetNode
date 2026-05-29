@@ -16,7 +16,44 @@ document.addEventListener('DOMContentLoaded', () => {
     var consoleStatus = document.getElementById('console-status');
     var briefingBody  = document.getElementById('briefing-body');
     var briefingTextEl = briefingBody ? briefingBody.querySelector('.briefing-text') : null;
+    var mapHeat       = document.getElementById('map-heat');
     var body          = document.body;
+
+    function gpsToMap(lat, lng) {
+        return {
+            x: ((lng - 106.3) / 0.6) * 95.83 + 2.5,
+            y: ((29.7 - lat) / 0.4) * 97 + 1
+        };
+    }
+
+    function renderHeatMap() {
+        if (!mapHeat) return;
+        mapHeat.querySelectorAll('.heat-spot, .heat-dot').forEach(function(el) { el.remove(); });
+        devices.forEach(function(d) {
+            if (!d.gps_lat || !d.gps_lng) return;
+            var pos = gpsToMap(d.gps_lat, d.gps_lng);
+            var color = hrClr(d.heart_rate);
+            var spot = document.createElement('div');
+            spot.className = 'heat-spot';
+            spot.style.left = pos.x + '%';
+            spot.style.top = pos.y + '%';
+            spot.style.width = '55px';
+            spot.style.height = '55px';
+            spot.style.marginLeft = '-27px';
+            spot.style.marginTop = '-27px';
+            spot.style.background = 'radial-gradient(circle, ' + color + ' 0%, transparent 70%)';
+            mapHeat.appendChild(spot);
+        });
+        for (var i = 0; i < 40; i++) {
+            var dot = document.createElement('div');
+            dot.className = 'heat-dot';
+            dot.style.left = (15 + Math.random() * 70) + '%';
+            dot.style.top = (15 + Math.random() * 70) + '%';
+            dot.style.background = '#00e5ff';
+            dot.style.boxShadow = '0 0 4px #00e5ff';
+            mapHeat.appendChild(dot);
+        }
+    }
 
     function fmtTime(ts) {
         if (!ts) return '--';
@@ -227,6 +264,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (consoleStatus) consoleStatus.textContent = '就绪 · ' + devices.length + ' 设备 · ' + (stats ? stats.sample_count : 0) + ' 样本';
             render();
             updateBriefing();
+            if (mapHeat) { mapHeat.classList.remove('active'); mapHeat.querySelectorAll('.heat-spot, .heat-dot').forEach(function(el) { el.remove(); }); }
+            setTimeout(function() { renderHeatMap(); if (mapHeat) mapHeat.classList.add('active'); }, 100);
         }).catch(function() {
             if (consoleStatus) consoleStatus.textContent = '连接失败';
             render();
@@ -265,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (accordion) accordion.innerHTML = '';
         if (consoleStatus) consoleStatus.textContent = '系统就绪';
         if (briefingTextEl) briefingTextEl.textContent = '请选择右侧数据指标以查看详细分析简报。';
+        if (mapHeat) { mapHeat.classList.remove('active'); mapHeat.querySelectorAll('.heat-spot, .heat-dot').forEach(function(el) { el.remove(); }); }
     }
 
     toggleInput.addEventListener('change', function() {
