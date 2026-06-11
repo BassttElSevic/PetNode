@@ -7,15 +7,15 @@
   <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
   <style>
     :root {
-      --bg-primary: #f0f2f5;
-      --bg-panel: #ffffff;
-      --bg-card: #fafbfc;
-      --border-subtle: rgba(0,0,0,0.06);
-      --border-active: rgba(0,150,210,0.3);
-      --text-primary: #1a1d26;
-      --text-secondary: #5a6070;
-      --text-muted: #9aa0b0;
-      --accent-cyan: #009a8c;
+      --bg-primary: #0d1117;
+      --bg-panel: #161b22;
+      --bg-card: #1c2333;
+      --border-subtle: rgba(255,255,255,0.06);
+      --border-active: rgba(26,115,232,0.3);
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #5c6878;
+      --accent-cyan: #1a73e8;
       --accent-red: #e0314b;
       --accent-green: #1fa855;
       --accent-orange: #e67e22;
@@ -46,7 +46,7 @@
       flex-shrink: 0;
     }
     .header-left { display: flex; align-items: center; gap: 16px; }
-    .header-logo { font-size: 20px; font-weight: 800; letter-spacing: 3px; color: #fff; }
+    .header-logo { font-size: 20px; font-weight: 800; letter-spacing: 3px; color: #e0503a; }
     .header-divider { width: 1px; height: 20px; background: rgba(255,255,255,0.35); }
     .header-subtitle { font-size: 12px; color: rgba(255,255,255,0.8); letter-spacing: 1px; }
     .header-right { display: flex; align-items: center; gap: 20px; }
@@ -103,19 +103,19 @@
     .map-calibrate-bar {
       position: absolute; bottom: 0; left: 0; right: 0;
       height: 28px;
-      background: rgba(255,255,255,0.92);
+      background: rgba(0,0,0,0.85);
       display: flex; align-items: center; justify-content: center; gap: 16px;
       z-index: 15; font-size: 11px; color: var(--text-muted);
-      border-top: 1px solid rgba(0,0,0,0.06);
+      border-top: 1px solid rgba(255,255,255,0.08);
     }
     .map-calibrate-bar span { font-family: var(--font-mono); }
     .map-calibrate-reset {
-      background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.1);
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
       color: var(--text-secondary); padding: 2px 10px; border-radius: 3px;
       cursor: pointer; font-size: 10px; font-family: inherit;
       transition: all 0.2s;
     }
-    .map-calibrate-reset:hover { background: rgba(0,144,200,0.08); border-color: var(--border-active); color: var(--accent-cyan); }
+    .map-calibrate-reset:hover { background: rgba(26,115,232,0.15); border-color: var(--border-active); color: var(--accent-cyan); }
     .map-edit-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted); cursor: pointer; font-family: var(--font-sans); }
     .map-edit-toggle input { accent-color: var(--accent-cyan); cursor: pointer; }
     #map-chart {
@@ -135,30 +135,38 @@
     /* InfoBox popup */
     .map-infobox {
       position: absolute; z-index: 20;
-      background: rgba(255,255,255,0.96); border: 1px solid var(--border-active);
+      background: rgba(22,27,34,0.97); border: 1px solid var(--border-active);
       border-radius: 6px; padding: 14px 18px; min-width: 200px;
       pointer-events: none; opacity: 0; transform: translateY(6px);
       transition: opacity 0.25s, transform 0.25s;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     }
     .map-infobox.visible { opacity: 1; transform: translateY(0); }
-    .map-infobox .info-device { font-size: 11px; color: #333; font-family: var(--font-mono); margin-bottom: 6px; }
-    .map-infobox .info-dim-hint { font-size: 10px; color: #555; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.08); letter-spacing: 0.5px; }
+    .map-infobox .info-device { font-size: 11px; color: var(--accent-cyan); font-family: var(--font-mono); margin-bottom: 6px; }
+    .map-infobox .info-dim-hint { font-size: 10px; color: var(--accent-orange); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); letter-spacing: 0.5px; }
     .map-infobox .info-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; padding: 2px 0; transition: background 0.2s; }
-    .map-infobox .info-row.info-row-active { background: rgba(0,0,0,0.04); margin: 0 -6px 4px; padding: 3px 6px; border-radius: 3px; }
-    .map-infobox .info-label { color: #333; }
-    .map-infobox .info-value { color: #000; font-weight: 600; }
-    .map-infobox .info-row-active .info-label { color: #000; font-weight: 700; }
-    .map-infobox .info-row-active .info-value { font-size: 13px; color: #000; font-weight: 700; }
+    .map-infobox .info-row.info-row-active { background: rgba(26,115,232,0.1); margin: 0 -6px 4px; padding: 3px 6px; border-radius: 3px; }
+    .map-infobox .info-label { color: var(--text-muted); }
+    .map-infobox .info-value { color: var(--text-primary); font-weight: 600; }
+    .map-infobox .info-row-active .info-label { color: var(--text-secondary); }
+    .map-infobox .info-row-active .info-value { font-size: 13px; color: #fff; }
 
     /* AI Chat — DeepSeek-style clean UI */
     .chat-container {
       flex: 1;
       border-top: 3px solid var(--accent-cyan);
+      border-left: 3px solid var(--accent-cyan);
+      border-right: 3px solid var(--accent-cyan);
+      border-bottom: 3px solid var(--accent-cyan);
       display: flex;
       flex-direction: column;
       min-height: 0;
       background: var(--bg-panel);
+    }
+    .map-chat-divider {
+      height: 4px;
+      background: var(--accent-cyan);
+      flex-shrink: 0;
     }
     .chat-header {
       display: flex; align-items: center;
@@ -176,12 +184,12 @@
     .chat-msg.system { align-items: flex-start; }
     .chat-msg.user { align-items: flex-end; }
     .chat-msg.system .chat-bubble {
-      background: #f5f6f8; border-radius: 4px 12px 12px 12px;
+      background: #1c2333; border-radius: 4px 12px 12px 12px;
       color: var(--text-primary); font-size: 13px; line-height: 1.75;
       padding: 10px 16px; max-width: 88%;
     }
     .chat-msg.user .chat-bubble {
-      background: #e3f0fd; border-radius: 12px 4px 12px 12px;
+      background: #1a2d4a; border-radius: 12px 4px 12px 12px;
       color: var(--text-primary); font-size: 13px; line-height: 1.75;
       padding: 10px 16px; max-width: 88%;
     }
@@ -191,12 +199,12 @@
       padding: 12px 20px 16px; border-top: 1px solid var(--border-subtle);
     }
     .chat-input {
-      flex: 1; background: #f5f6f8; border: 2px solid transparent;
+      flex: 1; background: #1c2333; border: 2px solid transparent;
       border-radius: 20px; padding: 10px 18px; color: var(--text-primary);
       font-size: 13px; font-family: inherit; outline: none;
       transition: border-color 0.2s, background 0.2s;
     }
-    .chat-input:focus { border-color: var(--accent-cyan); background: #fff; }
+    .chat-input:focus { border-color: var(--accent-cyan); background: #161b22; }
     .chat-send {
       background: var(--accent-cyan); border: none;
       color: #fff; padding: 10px 22px; border-radius: 20px;
@@ -229,19 +237,19 @@
     /* ── Element Plus Overrides for Light Theme ── */
     .el-collapse {
       border: none;
-      --el-collapse-header-bg-color: #d5d8dd;
-      --el-collapse-content-bg-color: #e8f5e9;
-      --el-collapse-border-color: rgba(0,0,0,0.04);
+      --el-collapse-header-bg-color: #1c2333;
+      --el-collapse-content-bg-color: #1f1a2e;
+      --el-collapse-border-color: rgba(255,255,255,0.04);
     }
     .el-collapse-item {
-      border: 1px solid rgba(0,0,0,0.06) !important;
+      border: 1px solid rgba(255,255,255,0.06) !important;
       border-radius: 2px;
       margin-bottom: 0;
     }
-    .el-collapse-item:hover { border-color: rgba(0,0,0,0.12) !important; }
-    .el-collapse-item.is-active { border-color: rgba(0,0,0,0.15) !important; }
+    .el-collapse-item:hover { border-color: rgba(255,255,255,0.12) !important; }
+    .el-collapse-item.is-active { border-color: rgba(26,115,232,0.3) !important; }
     .el-collapse-item__header {
-      background: #d5d8dd !important;
+      background: #1c2333 !important;
       border: none !important;
       color: var(--text-secondary) !important;
       font-size: 14px !important;
@@ -252,29 +260,29 @@
       letter-spacing: 0.5px;
       transition: background 0.25s, color 0.25s;
     }
-    .el-collapse-item__header:hover { background: #c8ccd2 !important; color: var(--text-primary) !important; }
+    .el-collapse-item__header:hover { background: #252d3d !important; color: var(--text-primary) !important; }
     .el-collapse-item.is-active .el-collapse-item__header {
-      color: #2e7d32 !important;
-      background: #c8e6c9 !important;
-      border-bottom: 1px solid rgba(46,125,50,0.12) !important;
+      color: #c4b5fd !important;
+      background: #1f1a2e !important;
+      border-bottom: 1px solid rgba(167,139,250,0.2) !important;
     }
-    .el-collapse-item__wrap { background: #e8f5e9 !important; border: none !important; }
+    .el-collapse-item__wrap { background: #151021 !important; border: none !important; }
     .el-collapse-item__content { padding: 16px 20px !important; color: var(--text-secondary); }
     .el-collapse-item__arrow { color: var(--text-muted) !important; }
-    .el-collapse-item.is-active .el-collapse-item__arrow { color: #2e7d32 !important; }
+    .el-collapse-item.is-active .el-collapse-item__arrow { color: #a78bfa !important; }
 
     /* Radio group */
     .panel-radio-group { margin-bottom: 12px; display: flex; justify-content: flex-end; }
     .el-radio-group .el-radio-button__inner {
-      background: #fafbfc !important;
-      border-color: rgba(0,0,0,0.08) !important;
+      background: #1c2333 !important;
+      border-color: rgba(255,255,255,0.06) !important;
       color: var(--text-muted) !important;
       font-size: 11px !important;
       padding: 6px 14px !important;
     }
     .el-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner {
-      background: rgba(0,150,210,0.08) !important;
-      border-color: rgba(0,150,210,0.3) !important;
+      background: rgba(26,115,232,0.15) !important;
+      border-color: rgba(26,115,232,0.35) !important;
       color: var(--accent-cyan) !important;
       box-shadow: none !important;
     }
@@ -282,8 +290,8 @@
     /* Alert */
     .el-alert { margin-bottom: 14px; border-radius: 4px !important; }
     .el-alert--error {
-      background: rgba(224,49,75,0.05) !important;
-      border: 1px solid rgba(224,49,75,0.15) !important;
+      background: rgba(224,49,75,0.08) !important;
+      border: 1px solid rgba(224,49,75,0.2) !important;
     }
     .el-alert__title { font-size: 12px !important; color: var(--accent-red) !important; }
 
@@ -294,6 +302,19 @@
     .chart-stat-item { flex: 1; min-width: 80px; }
     .chart-stat-label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
     .chart-stat-value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); }
+    .panel-content-row { display: flex; gap: 14px; }
+    .panel-content-row .chart-area-wrapper { flex: 1; min-width: 0; }
+    .regional-alerts-panel {
+      width: 170px; flex-shrink: 0;
+      background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 6px; padding: 10px 12px; overflow-y: auto; max-height: 220px;
+    }
+    .regional-alert-title { font-size: 12px; font-weight: 700; color: #f87171; margin-bottom: 8px; }
+    .regional-alert-item { margin-bottom: 8px; }
+    .regional-alert-item:last-child { margin-bottom: 0; }
+    .ra-district { font-size: 11px; font-weight: 600; color: #fca5a5; }
+    .ra-count { font-size: 10px; color: #ef4444; font-family: var(--font-mono); margin-left: 4px; }
+    .ra-desc { font-size: 10px; color: #fca5a5; display: block; margin-top: 1px; }
 
     /* Accordion header custom layout */
     .collapse-header-custom {
@@ -301,10 +322,10 @@
     }
     .collapse-marker {
       width: 9px; height: 9px; border-radius: 50%;
-      background: #c0c4cc; flex-shrink: 0;
+      background: #3d4555; flex-shrink: 0;
       transition: all 0.3s;
     }
-    .is-active .collapse-marker { background: #e8a840; box-shadow: 0 0 6px rgba(232,168,64,0.35); }
+    .is-active .collapse-marker { background: #a78bfa; box-shadow: 0 0 8px rgba(167,139,250,0.4); }
   </style>
 </head>
 <body>
@@ -342,10 +363,11 @@
         <!-- Calibration bar -->
         <div class="map-calibrate-bar">
           <label class="map-edit-toggle"><input type="checkbox" v-model="mapEditMode"> 调整地图</label>
-          <span>X: {{ bgOffset.x }} &middot; Y: {{ bgOffset.y }} &middot; {{ (bgScale * 100).toFixed(0) }}%</span>
+<span>X: {{ bgOffset.x }} &middot; Y: {{ bgOffset.y }} &middot; {{ (bgScale * 100).toFixed(0) }}%</span>
           <button class="map-calibrate-reset" @click="resetBgOffset">重置</button>
         </div>
       </div>
+      <div class="map-chat-divider"></div>
       <div class="chat-container">
         <div class="chat-header">
           <span class="chat-header-title">AI 智能简报与分析</span>
@@ -403,13 +425,23 @@
               show-icon
             />
 
-            <!-- Chart area wrapped in stable container to prevent Vue DOM reuse -->
-            <div class="chart-area-wrapper">
-              <div class="chart-box" :ref="el => setChartRef(idx, el)"></div>
-              <div class="chart-stats-row">
-                <div v-for="stat in dim.stats" class="chart-stat-item">
-                  <div class="chart-stat-label">{{ stat.label }}</div>
-                  <div class="chart-stat-value" :style="{color: stat.color}">{{ stat.value }}</div>
+            <!-- Chart + alerts side by side -->
+            <div class="panel-content-row">
+              <div class="chart-area-wrapper">
+                <div class="chart-box" :ref="el => setChartRef(idx, el)"></div>
+                <div class="chart-stats-row">
+                  <div v-for="stat in dim.stats" class="chart-stat-item">
+                    <div class="chart-stat-label">{{ stat.label }}</div>
+                    <div class="chart-stat-value" :style="{color: stat.color}">{{ stat.value }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="regional-alerts-panel" v-if="dim.regionalAlerts && dim.regionalAlerts.length">
+                <div class="regional-alert-title">⚠ 区域异常</div>
+                <div class="regional-alert-item" v-for="a in dim.regionalAlerts">
+                  <span class="ra-district">{{ a.district }}</span>
+                  <span class="ra-count">{{ a.count }}例</span>
+                  <span class="ra-desc">{{ a.desc }}</span>
                 </div>
               </div>
             </div>
@@ -453,41 +485,74 @@ const app = createApp({
       { name: '巴南区', lng: 106.52, lat: 29.48, devices: 18 },
     ];
 
-    // Dog breeds, sizes, statuses, anomalies
-    const dogBreeds = ['金毛','柯基','泰迪','哈士奇','边牧','法斗','柴犬','萨摩耶','德牧','比熊','拉布拉多','博美'];
-    const dogSizes = ['大型犬','中型犬','小型犬'];
-    const statusLabels = ['运动','静息','睡眠'];
-    const anomalyLabels = ['无异常','心脏异常','骨骼异常','呼吸异常'];
+    // Hand-crafted test data covering all threshold edge cases
+    const allDevices = [
+      // ===== 渝北区 (7 devices) =====
+      { deviceId:'PN0001', district:'渝北区', lng:106.48, lat:29.64, dogSize:'大型犬', heartRate:155, status:'运动', respRate:35, temperature:39.8, pace:95, anomaly:'心脏异常' },
+      { deviceId:'PN0002', district:'渝北区', lng:106.49, lat:29.63, dogSize:'大型犬', heartRate:148, status:'运动', respRate:32, temperature:39.2, pace:88, anomaly:'心脏异常' },
+      { deviceId:'PN0003', district:'渝北区', lng:106.47, lat:29.62, dogSize:'大型犬', heartRate:90,  status:'静息', respRate:18, temperature:38.3, pace:20,  anomaly:'无异常' },
+      { deviceId:'PN0004', district:'渝北区', lng:106.50, lat:29.61, dogSize:'中型犬', heartRate:72,  status:'睡眠', respRate:12, temperature:37.8, pace:5,   anomaly:'无异常' },
+      { deviceId:'PN0005', district:'渝北区', lng:106.48, lat:29.60, dogSize:'大型犬', heartRate:55,  status:'静息', respRate:9,  temperature:37.2, pace:15,  anomaly:'无异常' },
+      { deviceId:'PN0006', district:'渝北区', lng:106.51, lat:29.62, dogSize:'小型犬', heartRate:105, status:'运动', respRate:22, temperature:38.5, pace:60,  anomaly:'无异常' },
+      { deviceId:'PN0007', district:'渝北区', lng:106.49, lat:29.59, dogSize:'大型犬', heartRate:160, status:'运动', respRate:38, temperature:40.1, pace:105, anomaly:'心脏异常' },
 
-    function seedRand(s) { const m=0x6D2B79F5; let a=(s|0)*m; a=(a^a>>>15)*m; a=(a^a>>>7)*m; return ((a^a>>>14)>>>0)/4294967296; }
+      // ===== 江北区 (7 devices) =====
+      { deviceId:'PN0008', district:'江北区', lng:106.50, lat:29.60, dogSize:'中型犬', heartRate:88,  status:'静息', respRate:16, temperature:38.2, pace:25,  anomaly:'无异常' },
+      { deviceId:'PN0009', district:'江北区', lng:106.52, lat:29.59, dogSize:'小型犬', heartRate:110, status:'运动', respRate:24, temperature:38.6, pace:72,  anomaly:'无异常' },
+      { deviceId:'PN0010', district:'江北区', lng:106.51, lat:29.58, dogSize:'大型犬', heartRate:52,  status:'睡眠', respRate:8,  temperature:37.0, pace:3,   anomaly:'骨骼异常' },
+      { deviceId:'PN0011', district:'江北区', lng:106.53, lat:29.60, dogSize:'中型犬', heartRate:75,  status:'静息', respRate:14, temperature:38.0, pace:18,  anomaly:'无异常' },
+      { deviceId:'PN0012', district:'江北区', lng:106.50, lat:29.57, dogSize:'小型犬', heartRate:95,  status:'运动', respRate:20, temperature:38.4, pace:55,  anomaly:'无异常' },
+      { deviceId:'PN0013', district:'江北区', lng:106.52, lat:29.61, dogSize:'大型犬', heartRate:142, status:'运动', respRate:30, temperature:39.0, pace:92,  anomaly:'呼吸异常' },
+      { deviceId:'PN0014', district:'江北区', lng:106.49, lat:29.58, dogSize:'中型犬', heartRate:68,  status:'睡眠', respRate:11, temperature:37.5, pace:8,   anomaly:'无异常' },
 
-    // Generate 50 devices with real lat/lng distributed across districts
-    const allDevices = [];
-    for (let i = 0; i < 50; i++) {
-      const didx = i % districts.length;
-      const dist = districts[didx];
-      const rng = seedRand(i * 137 + 42);
-      const dogSize = dogSizes[Math.floor(rng * 3)];
-      const heartRate = Math.round(55 + rng * 110);
-      const statusIdx = Math.floor(rng * 3);
-      const respRate = Math.round(8 + rng * 32);
-      const temp = (37.5 + rng * 3.5).toFixed(1);
-      const pace = Math.round(rng * 120);
-      const anomalyIdx = rng < 0.7 ? 0 : Math.floor(rng * 3 + 1);
+      // ===== 沙坪坝区 (8 devices - hotspot for anomalies) =====
+      { deviceId:'PN0015', district:'沙坪坝区', lng:106.42, lat:29.57, dogSize:'中型犬', heartRate:150, status:'运动', respRate:34, temperature:39.5, pace:90,  anomaly:'心脏异常' },
+      { deviceId:'PN0016', district:'沙坪坝区', lng:106.44, lat:29.56, dogSize:'大型犬', heartRate:145, status:'静息', respRate:28, temperature:39.3, pace:35,  anomaly:'心脏异常' },
+      { deviceId:'PN0017', district:'沙坪坝区', lng:106.43, lat:29.55, dogSize:'小型犬', heartRate:165, status:'运动', respRate:36, temperature:40.0, pace:98,  anomaly:'心脏异常' },
+      { deviceId:'PN0018', district:'沙坪坝区', lng:106.45, lat:29.58, dogSize:'中型犬', heartRate:58,  status:'睡眠', respRate:9,  temperature:37.1, pace:4,   anomaly:'呼吸异常' },
+      { deviceId:'PN0019', district:'沙坪坝区', lng:106.41, lat:29.54, dogSize:'大型犬', heartRate:135, status:'运动', respRate:29, temperature:38.9, pace:85,  anomaly:'呼吸异常' },
+      { deviceId:'PN0020', district:'沙坪坝区', lng:106.44, lat:29.56, dogSize:'小型犬', heartRate:80,  status:'静息', respRate:15, temperature:38.1, pace:22,  anomaly:'无异常' },
+      { deviceId:'PN0021', district:'沙坪坝区', lng:106.43, lat:29.53, dogSize:'中型犬', heartRate:48,  status:'睡眠', respRate:7,  temperature:36.8, pace:2,   anomaly:'骨骼异常' },
+      { deviceId:'PN0022', district:'沙坪坝区', lng:106.46, lat:29.55, dogSize:'大型犬', heartRate:95,  status:'静息', respRate:17, temperature:38.3, pace:28,  anomaly:'无异常' },
 
-      allDevices.push({
-        deviceId: 'PN' + String(i + 1).padStart(4, '0'),
-        district: dist.name,
-        lng: dist.lng + (rng - 0.5) * 0.04,
-        lat: dist.lat + (rng - 0.5) * 0.03,
-        dogSize, heartRate,
-        status: statusLabels[statusIdx],
-        respRate,
-        temperature: parseFloat(temp),
-        pace,
-        anomaly: anomalyLabels[anomalyIdx],
-      });
-    }
+      // ===== 渝中区 (5 devices) =====
+      { deviceId:'PN0023', district:'渝中区', lng:106.53, lat:29.56, dogSize:'小型犬', heartRate:100, status:'静息', respRate:19, temperature:38.2, pace:30,  anomaly:'无异常' },
+      { deviceId:'PN0024', district:'渝中区', lng:106.54, lat:29.55, dogSize:'小型犬', heartRate:85,  status:'静息', respRate:16, temperature:38.0, pace:22,  anomaly:'无异常' },
+      { deviceId:'PN0025', district:'渝中区', lng:106.52, lat:29.57, dogSize:'中型犬', heartRate:50,  status:'睡眠', respRate:8,  temperature:36.9, pace:3,   anomaly:'骨骼异常' },
+      { deviceId:'PN0026', district:'渝中区', lng:106.53, lat:29.55, dogSize:'小型犬', heartRate:92,  status:'静息', respRate:18, temperature:38.1, pace:26,  anomaly:'无异常' },
+      { deviceId:'PN0027', district:'渝中区', lng:106.54, lat:29.56, dogSize:'小型犬', heartRate:108, status:'运动', respRate:22, temperature:38.5, pace:58,  anomaly:'无异常' },
+
+      // ===== 南岸区 (7 devices) =====
+      { deviceId:'PN0028', district:'南岸区', lng:106.55, lat:29.54, dogSize:'中型犬', heartRate:78,  status:'静息', respRate:15, temperature:38.0, pace:20,  anomaly:'无异常' },
+      { deviceId:'PN0029', district:'南岸区', lng:106.53, lat:29.53, dogSize:'大型犬', heartRate:140, status:'运动', respRate:31, temperature:39.1, pace:86,  anomaly:'无异常' },
+      { deviceId:'PN0030', district:'南岸区', lng:106.56, lat:29.52, dogSize:'小型犬', heartRate:55,  status:'睡眠', respRate:10, temperature:37.3, pace:6,   anomaly:'无异常' },
+      { deviceId:'PN0031', district:'南岸区', lng:106.54, lat:29.55, dogSize:'中型犬', heartRate:92,  status:'运动', respRate:21, temperature:38.4, pace:65,  anomaly:'无异常' },
+      { deviceId:'PN0032', district:'南岸区', lng:106.55, lat:29.51, dogSize:'大型犬', heartRate:45,  status:'睡眠', respRate:7,  temperature:36.7, pace:2,   anomaly:'呼吸异常' },
+      { deviceId:'PN0033', district:'南岸区', lng:106.52, lat:29.54, dogSize:'小型犬', heartRate:115, status:'运动', respRate:25, temperature:38.7, pace:75,  anomaly:'无异常' },
+      { deviceId:'PN0034', district:'南岸区', lng:106.57, lat:29.53, dogSize:'中型犬', heartRate:68,  status:'静息', respRate:13, temperature:37.9, pace:16,  anomaly:'无异常' },
+
+      // ===== 九龙坡区 (6 devices) =====
+      { deviceId:'PN0035', district:'九龙坡区', lng:106.48, lat:29.53, dogSize:'中型犬', heartRate:82,  status:'静息', respRate:16, temperature:38.1, pace:22,  anomaly:'无异常' },
+      { deviceId:'PN0036', district:'九龙坡区', lng:106.46, lat:29.52, dogSize:'小型犬', heartRate:60,  status:'睡眠', respRate:11, temperature:37.4, pace:5,   anomaly:'无异常' },
+      { deviceId:'PN0037', district:'九龙坡区', lng:106.49, lat:29.51, dogSize:'大型犬', heartRate:130, status:'运动', respRate:27, temperature:38.8, pace:82,  anomaly:'心脏异常' },
+      { deviceId:'PN0038', district:'九龙坡区', lng:106.47, lat:29.54, dogSize:'中型犬', heartRate:70,  status:'静息', respRate:14, temperature:37.8, pace:18,  anomaly:'无异常' },
+      { deviceId:'PN0039', district:'九龙坡区', lng:106.50, lat:29.52, dogSize:'小型犬', heartRate:98,  status:'运动', respRate:20, temperature:38.5, pace:62,  anomaly:'无异常' },
+      { deviceId:'PN0040', district:'九龙坡区', lng:106.47, lat:29.50, dogSize:'大型犬', heartRate:53,  status:'睡眠', respRate:8,  temperature:37.0, pace:4,   anomaly:'无异常' },
+
+      // ===== 大渡口区 (5 devices) =====
+      { deviceId:'PN0041', district:'大渡口区', lng:106.46, lat:29.51, dogSize:'小型犬', heartRate:88,  status:'静息', respRate:17, temperature:38.0, pace:24,  anomaly:'无异常' },
+      { deviceId:'PN0042', district:'大渡口区', lng:106.44, lat:29.50, dogSize:'中型犬', heartRate:65,  status:'睡眠', respRate:12, temperature:37.6, pace:7,   anomaly:'无异常' },
+      { deviceId:'PN0043', district:'大渡口区', lng:106.47, lat:29.49, dogSize:'小型犬', heartRate:102, status:'运动', respRate:21, temperature:38.3, pace:56,  anomaly:'无异常' },
+      { deviceId:'PN0044', district:'大渡口区', lng:106.45, lat:29.52, dogSize:'中型犬', heartRate:76,  status:'静息', respRate:15, temperature:38.1, pace:19,  anomaly:'无异常' },
+      { deviceId:'PN0045', district:'大渡口区', lng:106.46, lat:29.48, dogSize:'小型犬', heartRate:95,  status:'静息', respRate:18, temperature:38.2, pace:28,  anomaly:'无异常' },
+
+      // ===== 巴南区 (5 devices) =====
+      { deviceId:'PN0046', district:'巴南区', lng:106.52, lat:29.49, dogSize:'大型犬', heartRate:72,  status:'静息', respRate:14, temperature:38.0, pace:20,  anomaly:'无异常' },
+      { deviceId:'PN0047', district:'巴南区', lng:106.53, lat:29.47, dogSize:'中型犬', heartRate:56,  status:'睡眠', respRate:10, temperature:37.2, pace:6,   anomaly:'无异常' },
+      { deviceId:'PN0048', district:'巴南区', lng:106.50, lat:29.48, dogSize:'小型犬', heartRate:106, status:'运动', respRate:23, temperature:38.6, pace:68,  anomaly:'无异常' },
+      { deviceId:'PN0049', district:'巴南区', lng:106.54, lat:29.50, dogSize:'中型犬', heartRate:85,  status:'静息', respRate:17, temperature:38.3, pace:24,  anomaly:'无异常' },
+      { deviceId:'PN0050', district:'巴南区', lng:106.51, lat:29.46, dogSize:'大型犬', heartRate:47,  status:'睡眠', respRate:6,  temperature:36.5, pace:2,   anomaly:'无异常' },
+    ];
 
     /* ── 7 Dimensions ── */
     const dimensions = reactive([
@@ -606,6 +671,7 @@ const app = createApp({
         id: 'respiration',
         title: '宠物呼吸频率监测',
         timeMode: 'realtime',
+        regionalAlert: '⚠ 南岸区南部 3 例呼吸频率持续过快 (>40次/分)，疑似高温应激或呼吸道感染！',
         alerts: {
           realtime: '南岸区 3 例呼吸频率过快 (>40次/分)，疑似高温应激反应',
           '24h': '过去24小时呼吸频率峰值出现在 14:00，与气温正相关 r=0.72',
@@ -644,6 +710,7 @@ const app = createApp({
         id: 'temperature',
         title: '宠物体温状态',
         timeMode: 'realtime',
+        regionalAlert: '⚠ 巴南区 2 例宠物体温超 39.5°C，疑似中暑或感染性发热，建议立即排查！',
         alerts: {
           realtime: '巴南区 2 例宠物体温过高 (>39.5°C)，建议立即降温处理',
           '24h': '过去24小时体温异常集中在 12:00-16:00 高温时段，巴南区为高风险区',
@@ -682,6 +749,7 @@ const app = createApp({
         id: 'pace',
         title: '宠物步频速度监测',
         timeMode: 'realtime',
+        regionalAlert: '⚠ 江北区西部 8 例步频异常偏高，伴随异常运动模式，可能为焦躁或疼痛表现！',
         alerts: {
           realtime: '江北区 8 例步频异常偏高，伴随运动强度警告',
           '24h': '今日步频峰值集中在早晚遛狗时段 (07:00-09:00, 18:00-20:00)',
@@ -714,6 +782,7 @@ const app = createApp({
         id: 'anomalyEvent',
         title: '宠物异常事件监控',
         timeMode: 'realtime',
+        regionalAlert: '⚠ 沙坪坝区东部集群异常！4 例心脏异常 + 2 例呼吸异常叠加，疑似区域传染性病原体扩散！',
         alerts: {
           realtime: '⚠ 当前检测到 4 例心脏异常、2 例呼吸异常、1 例骨骼异常',
           '24h': '过去24小时共触发 23 次异常事件预警，其中 16 次为心脏异常',
@@ -897,12 +966,12 @@ const app = createApp({
       const inst = safeInit(dom);
       inst.setOption({
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', backgroundColor: 'rgba(255,255,255,0.97)', borderColor: '#0090c840', textStyle: { color: '#1a1d26', fontSize: 12 } },
-        legend: { orient: 'vertical', left: 8, top: 'center', textStyle: { color: '#5a6070', fontSize: 11 }, itemWidth: 10, itemHeight: 10, itemGap: 12 },
+        tooltip: { trigger: 'item', backgroundColor: 'rgba(22,27,34,0.97)', borderColor: '#1a73e840', textStyle: { color: '#e6edf3', fontSize: 12 } },
+        legend: { orient: 'vertical', left: 8, top: 'center', textStyle: { color: '#8b949e', fontSize: 11 }, itemWidth: 10, itemHeight: 10, itemGap: 12 },
         series: [{
           type: 'pie',
           radius: ['55%', '78%'],
-          center: ['58%', '50%'],
+          center: ['50%', '50%'],
           avoidLabelOverlap: false,
           itemStyle: { borderRadius: 2, borderColor: '#ffffff', borderWidth: 2 },
           label: { show: false },
@@ -918,11 +987,11 @@ const app = createApp({
       const inst = safeInit(dom);
       inst.setOption({
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.97)', borderColor: '#0090c840', textStyle: { color: '#1a1d26', fontSize: 12 } },
-        legend: { bottom: 0, textStyle: { color: '#5a6070', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
+        tooltip: { trigger: 'axis', backgroundColor: 'rgba(22,27,34,0.97)', borderColor: '#1a73e840', textStyle: { color: '#e6edf3', fontSize: 12 } },
+        legend: { bottom: 0, textStyle: { color: '#8b949e', fontSize: 10 }, itemWidth: 10, itemHeight: 10 },
         grid: { left: 8, right: 8, top: 10, bottom: 36 },
-        xAxis: { type: 'category', data: categories || ['渝东', '渝南', '渝西', '渝北'], axisLabel: { color: '#9aa0b0', fontSize: 10 }, axisLine: { lineStyle: { color: '#00000010' } } },
-        yAxis: { type: 'value', axisLabel: { color: '#9aa0b0', fontSize: 10 }, splitLine: { lineStyle: { color: '#00000008' } } },
+        xAxis: { type: 'category', data: categories || ['渝东', '渝南', '渝西', '渝北'], axisLabel: { color: '#5c6878', fontSize: 10 }, axisLine: { lineStyle: { color: '#ffffff10' } } },
+        yAxis: { type: 'value', axisLabel: { color: '#5c6878', fontSize: 10 }, splitLine: { lineStyle: { color: '#ffffff08' } } },
         series: (barData || []).map(s => ({
           name: s.name,
           type: 'bar',
@@ -934,6 +1003,42 @@ const app = createApp({
         })),
       });
       return inst;
+    }
+
+    /* ── Compute regional anomaly alerts per dimension ── */
+    const anomalyDesc = {
+      dogSize: '大型犬占比异常',
+      heartRate: '心率异常',
+      status: '运动严重不足',
+      respiration: '呼吸频率异常',
+      temperature: '体温异常',
+      pace: '步频异常',
+      anomalyEvent: '异常事件',
+    };
+    function computeRegionalAlerts(idx) {
+      const dim = dimensions[idx];
+      const counts = {};
+      allDevices.forEach(d => {
+        let isAnomaly = false;
+        switch (dim.id) {
+          case 'dogSize': isAnomaly = d.dogSize === '大型犬'; break;
+          case 'heartRate': isAnomaly = d.heartRate > 140 || d.heartRate < 60; break;
+          case 'status': return; // no regional alerts for behavior status
+          case 'respiration': isAnomaly = d.respRate > 30 || d.respRate < 10; break;
+          case 'temperature': isAnomaly = d.temperature > 39 || d.temperature < 37.5; break;
+          case 'pace': isAnomaly = d.pace > 80; break;
+          case 'anomalyEvent': isAnomaly = d.anomaly !== '无异常'; break;
+        }
+        if (isAnomaly) counts[d.district] = (counts[d.district] || 0) + 1;
+      });
+      const alerts = Object.entries(counts)
+        .filter(([,c]) => c >= 1)
+        .sort(([,a],[,b]) => b - a)
+        .map(([district, count]) => ({
+          district, count,
+          desc: anomalyDesc[dim.id] || '数据异常',
+        }));
+      dim.regionalAlerts = alerts;
     }
 
     /* ── Render a dimension panel chart ── */
@@ -967,6 +1072,8 @@ const app = createApp({
 
     /* ── Map coordinate bounds (centered on urban core) ── */
     const MAP_BOUNDS = { lngMin: 106.38, lngMax: 106.60, latMin: 29.48, latMax: 29.64 };
+
+    // Core reference point: 朝天门 (Yangtze + Jialing confluence)
 
     /* ── Map Chart (transparent overlay on CSS background image) ── */
     function buildMapChart() {
@@ -1005,6 +1112,24 @@ const app = createApp({
           value: [d.lng, d.lat],
           itemStyle: { color: dim ? dim.getDeviceColor(d) : '#ff3b5c' },
         }));
+
+      // District-level anomaly aggregation for warning markers
+      const districtAnomalies = {};
+      anomalyData.forEach(ad => {
+        const d = allDevices.find(dv => dv.lng === ad.value[0] && dv.lat === ad.value[1]);
+        if (d) {
+          districtAnomalies[d.district] = (districtAnomalies[d.district] || 0) + 1;
+        }
+      });
+      const warningDistricts = districts.filter(d => (districtAnomalies[d.name] || 0) >= 2);
+      const warningMarkers = warningDistricts.map(d => ({
+        value: [d.lng, d.lat],
+        name: d.name,
+        symbol: 'path://M0,-14 L12,8 L-12,8 Z M-1.5,-5 L1.5,-5 L1,1 L-1,1 Z M0,3.5 L0,6 M-1.2,6 L1.2,6',
+        symbolSize: 28,
+        symbolKeepAspect: true,
+        itemStyle: { color: '#ef4444' },
+      }));
 
       const heatFog = anomalyData.flatMap(ad => {
         const pts = [];
@@ -1056,13 +1181,14 @@ const app = createApp({
             effect: { show: true, period: 5, trailLength: 0.25, symbol: 'circle', symbolSize: 2.5, color: 'rgba(20,180,230,0.45)' },
             zlevel: 0, silent: true,
           },
-          // ── Confluence marker (朝天门) ──
+          // ── Confluence marker (朝天门 · core reference anchor) ──
           {
             type: 'effectScatter',
             coordinateSystem: 'cartesian2d',
-            data: [{ value: [106.502, 29.554], itemStyle: { color: '#009a8c' } }],
-            symbol: 'circle', symbolSize: 10,
-            rippleEffect: { brushType: 'stroke', scale: 3, period: 2 },
+            data: [{ value: [106.502, 29.554], itemStyle: { color: '#1a73e8' } }],
+            symbol: 'circle', symbolSize: 14,
+            rippleEffect: { brushType: 'stroke', scale: 4.5, period: 1.6 },
+            label: { show: true, formatter: '朝天门', position: 'right', color: '#1a73e8', fontSize: 11, fontWeight: 'bold', backgroundColor: 'rgba(22,27,34,0.8)', padding: [2,6], borderRadius: 3 },
             showEffectOn: 'render', zlevel: 1, silent: true,
           },
           // Heat fog
@@ -1070,20 +1196,104 @@ const app = createApp({
             type: 'scatter', coordinateSystem: 'cartesian2d',
             data: heatFog, symbol: 'circle', symbolSize: 16, silent: true, zlevel: 0,
           },
-          // Effect scatter anomaly glow
+          // Red fog blobs behind warning markers
+          {
+            type: 'scatter', coordinateSystem: 'cartesian2d',
+            data: warningDistricts.map(d => ({
+              value: [d.lng, d.lat],
+              itemStyle: { color: 'rgba(239,68,68,0.15)' },
+            })),
+            symbol: 'circle', symbolSize: 60,
+            zlevel: 2, silent: true,
+          },
+          // Warning triangle markers on anomaly hotspots
+          {
+            type: 'scatter', coordinateSystem: 'cartesian2d',
+            data: warningMarkers,
+            symbol: 'path://M0,-16 L13,8 L-13,8 Z',
+            symbolSize: 28,
+            symbolKeepAspect: true,
+            itemStyle: { color: '#ef4444' },
+            label: {
+              show: true,
+              formatter: '!',
+              color: '#fbbf24',
+              fontSize: 18,
+              fontWeight: 'bold',
+              position: 'inside',
+            },
+            zlevel: 3, silent: true,
+          },
+          // Effect scatter anomaly glow (silent so clicks pass through to main scatter)
           {
             type: 'effectScatter', coordinateSystem: 'cartesian2d',
             data: anomalyData, symbol: 'circle', symbolSize: 14,
             rippleEffect: { brushType: 'stroke', scale: 3.2, period: 2.8 },
-            showEffectOn: 'render', zlevel: 1,
+            showEffectOn: 'render', zlevel: 0, silent: true,
           },
           // Main device scatter
           {
             type: 'scatter', coordinateSystem: 'cartesian2d',
             data: seriesData, symbol: 'circle',
-            symbolSize: (val) => Math.max(5, Math.min(16, val[2] / 10)),
+            symbolSize: (val) => Math.max(8, Math.min(18, val[2] / 8)),
             label: { show: false },
-            emphasis: { scale: 2.4, label: { show: true, formatter: '{b}', position: 'top', color: '#000', fontSize: 11, backgroundColor: 'rgba(255,255,255,0.85)', padding: [2,6], borderRadius: 3 } },
+            emphasis: {
+              scale: 2.4,
+              label: {
+                show: true,
+                formatter: (p) => {
+                  const d = allDevices[p.data.deviceIdx];
+                  if (!d) return p.name;
+                  if (!dim) return '{name|' + d.deviceId + '}';
+                  let val, tag;
+                  switch (dim.id) {
+                    case 'heartRate':
+                      val = d.heartRate + ' bpm';
+                      tag = d.heartRate > 140 ? 'danger' : d.heartRate < 60 ? 'warn' : 'ok';
+                      break;
+                    case 'dogSize':
+                      val = d.dogSize;
+                      tag = d.dogSize === '大型犬' ? 'danger' : d.dogSize === '中型犬' ? 'low' : 'ok';
+                      break;
+                    case 'status':
+                      val = d.status;
+                      tag = d.status === '运动' ? 'danger' : d.status === '静息' ? 'ok' : 'low';
+                      break;
+                    case 'respiration':
+                      val = d.respRate + ' 次/分';
+                      tag = d.respRate > 30 ? 'danger' : d.respRate < 10 ? 'warn' : 'ok';
+                      break;
+                    case 'temperature':
+                      val = d.temperature.toFixed(1) + '°C';
+                      tag = d.temperature > 39 ? 'danger' : d.temperature < 37.5 ? 'low' : 'ok';
+                      break;
+                    case 'pace':
+                      val = d.pace + ' 步/分';
+                      tag = d.pace > 80 ? 'danger' : 'ok';
+                      break;
+                    case 'anomalyEvent':
+                      val = d.anomaly;
+                      tag = d.anomaly === '心脏异常' ? 'danger' : d.anomaly === '骨骼异常' ? 'gray' : d.anomaly === '呼吸异常' ? 'warn' : 'ok';
+                      break;
+                    default:
+                      val = ''; tag = 'name';
+                  }
+                  return '{name|' + d.deviceId + '}  {dot|·}  {' + tag + '|' + val + '}';
+                },
+                rich: {
+                  name: { color: '#8b949e', fontSize: 11 },
+                  dot: { color: '#5c6878', fontSize: 10, padding: [0,2,0,2] },
+                  ok: { color: '#4ade80', fontSize: 11, fontWeight: 'bold' },
+                  warn: { color: '#f59e0b', fontSize: 11, fontWeight: 'bold' },
+                  danger: { color: '#ef4444', fontSize: 11, fontWeight: 'bold' },
+                  low: { color: '#60a5fa', fontSize: 11, fontWeight: 'bold' },
+                  gray: { color: '#9ca3af', fontSize: 11, fontWeight: 'bold' },
+                },
+                position: 'top',
+                backgroundColor: 'rgba(22,27,34,0.94)',
+                padding: [4, 10], borderRadius: 4,
+              },
+            },
             zlevel: 2,
           },
         ],
@@ -1108,7 +1318,7 @@ const app = createApp({
 
       mapChart.off('click');
       mapChart.on('click', (params) => {
-        if (params.componentType === 'series' && params.seriesIndex === 5 && params.data.deviceIdx !== undefined) {
+        if (params.componentType === 'series' && params.seriesIndex === 7 && params.data.deviceIdx !== undefined) {
           const d = allDevices[params.data.deviceIdx];
           infobox.deviceId = d.deviceId;
           infobox.dimName = actDim ? actDim.title : '';
@@ -1173,11 +1383,12 @@ const app = createApp({
       // Render charts for panels that were opened
       const opened = (newArr || []).filter(n => !(oldArr || []).includes(n));
       opened.forEach(n => {
+        computeRegionalAlerts(n);
         nextTick(() => renderPanelChart(n));
       });
     }, { deep: false });
 
-    /* ── Exit ── */
+/* ── Exit ── */
     function exitDashboard() {
       if (confirm('确定退出管理大屏，返回 PetNode 官网？')) {
         window.location.href = 'index.html';
