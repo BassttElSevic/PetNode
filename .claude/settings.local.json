@@ -20,7 +20,18 @@
       "Bash(curl -s -X POST http://127.0.0.1:5000/api/v1/wechat/auth -H \"Content-Type: application/json\" -d '{\"code\":\"newuser002\"}')",
       "Bash(python -m json.tool)",
       "Bash(curl -s -X POST http://127.0.0.1:5000/api/data -H 'Authorization: Bearer petnode_secret_key_2026' -H 'Content-Type: application/json' -d '{ *)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(git -C \"d:/PetNode\" log --oneline -5)",
+      "Bash(git -C \"d:/PetNode\" log origin/PetNode.com --oneline -3)",
+      "Bash(git -C \"d:/PetNode\" diff --stat main..PetNode.com)",
+      "Bash(gh pr create --base main --head PetNode.com --title 'PetNode.com 前端页面合集' --body ' *)",
+      "Bash(git -C \"d:/PetNode\" fetch origin)",
+      "Bash(git -C \"d:/PetNode\" log origin/main..PetNode.com --oneline)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5000/api/health)",
+      "Bash(npx -y live-server --port=3456 --no-browser)",
+      "Bash(curl -s http://127.0.0.1:3456/admin.html)",
+      "Bash(node -e \"const fs = require\\('fs'\\); const html = fs.readFileSync\\('admin.html', 'utf8'\\); const m = html.match\\(/<script type=\\\\\"module\\\\\">\\([\\\\s\\\\S]*?\\)<\\\\/script>/\\); if \\(m\\) { try { new Function\\(m[1]\\); console.log\\('NO_SYNTAX_ERROR'\\); } catch\\(e\\) { console.log\\('SYNTAX_ERROR:', e.message\\); } } else { console.log\\('NO_MODULE_SCRIPT_FOUND'\\); }\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

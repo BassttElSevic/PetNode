@@ -1,0 +1,76 @@
+/* ==========================================
+   Admin Toggle - Sidebar Integration
+   ========================================== */
+.admin-toggle-wrapper {
+    margin-top: auto;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.admin-switch {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.admin-switch input {
+    display: none;
+}
+
+.toggle-track {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    position: relative;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #555;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.3s ease,
+                box-shadow 0.3s ease;
+}
+
+.admin-switch input:checked + .toggle-track {
+    background: rgba(0, 229, 255, 0.25);
+}
+
+.admin-switch input:checked + .toggle-track .toggle-thumb {
+    transform: translateX(16px);
+    background: #00e5ff;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+}
+
+.toggle-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sidebar-muted);
+    margin-left: 18px;
+    opacity: 0;
+    transform: translateX(10px);
+    transition: opacity 0.2s, transform 0.3s, color 0.2s;
+}
+
+#sidebar:hover .toggle-label {
+    opacity: 1;
+    transform: translateX(0);
+    transition-delay: 0.1s;
+}
+
+.admin-switch input:checked ~ .toggle-label {
+    color: #00e5ff;
+}
