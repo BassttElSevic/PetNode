@@ -3,6 +3,7 @@
 ## 固定部署信息
 - 服务器 IP：`47.108.239.80`
 - 域名：`pppetnode.com`
+- DNS 托管：Cloudflare（开启代理/橙色云图标）
 
 ## 1) Docker Compose 启动（在 `C_end_Simulator` 下）
 ```bash
@@ -26,6 +27,31 @@ certbot --nginx -d pppetnode.com -d www.pppetnode.com
 ```bash
 nginx -t && systemctl reload nginx
 ```
+
+## 2.1) Cloudflare 设置要求
+
+域名托管到 Cloudflare 后，**必须**检查以下设置：
+
+### SSL/TLS 模式（最重要！）
+进入 Cloudflare 面板 → SSL/TLS → Overview，选择：
+- **推荐：Full (Strict)** — CF 到源站走 HTTPS，要求源站有有效证书（Let's Encrypt 即可）
+- **Full** — CF 到源站走 HTTPS，不校验证书有效性
+- **⚠️ 切勿使用 Flexible** — 虽然 Nginx 已兼容此模式，但安全性较差
+
+### DNS 记录
+- A 记录：`pppetnode.com` → `47.108.239.80`（Proxy status: Proxied 橙色云）
+- CNAME 或 A 记录：`www.pppetnode.com` → 同上（Proxied）
+
+### 其他推荐设置
+- SSL/TLS → Edge Certificates → Always Use HTTPS: **开启**
+- SSL/TLS → Edge Certificates → Minimum TLS Version: **TLS 1.2**
+- Speed → Optimization → Auto Minify: 按需开启（JS/CSS/HTML）
+
+### 故障排查
+如果网站返回 **ERR_TOO_MANY_REDIRECTS** 或 **重定向次数过多**：
+1. 首先检查 Cloudflare SSL/TLS 模式是否设置为 Full 或 Full (Strict)
+2. 清除浏览器 Cookie
+3. 在 Cloudflare 中暂停代理（灰色云）测试直连是否正常
 
 ## 3) 微信小程序 API 基地址
 小程序 `wechat/WeChat_miniprogram/utils/api.js` 的 `BASE_URL` 应为：
