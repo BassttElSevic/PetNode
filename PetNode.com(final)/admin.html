@@ -60,6 +60,8 @@
       width: 6px; height: 6px; border-radius: 50%; background: var(--accent-red);
       animation: pulse 1.5s ease-in-out infinite;
     }
+    .header-live-offline { background: rgba(255,255,255,0.08) !important; border-color: rgba(255,255,255,0.12) !important; color: var(--text-muted) !important; }
+    .dot-offline { background: #666 !important; animation: none !important; }
     @keyframes pulse {
       0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(224,49,75,0.6); }
       50% { opacity: 0.4; box-shadow: 0 0 0 6px rgba(224,49,75,0); }
@@ -339,7 +341,12 @@
       <span class="header-subtitle">管理大屏 · 态势感知</span>
     </div>
     <div class="header-right">
-      <span class="header-live"><span class="header-live-dot"></span>LIVE</span>
+      <span class="header-live" :class="{ 'header-live-offline': !backendConnected }">
+        <span class="header-live-dot" :class="{ 'dot-offline': !backendConnected }"></span>
+        <template v-if="backendChecking">检测中...</template>
+        <template v-else-if="backendConnected">LIVE · {{ liveDeviceCount }}条</template>
+        <template v-else>离线模式 · 模拟数据</template>
+      </span>
       <span class="header-time">{{ currentTime }}</span>
       <button class="header-exit" @click="exitDashboard">退出大屏</button>
     </div>
@@ -452,6 +459,7 @@
   </div>
 </div>
 
+<script src="js/api.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -902,6 +910,11 @@ const app = createApp({
       deviceId: '', dimName: '', rows: [],
       visible: false, left: '0px', top: '0px',
     });
+
+        /* ── Backend connection status ── */
+    const backendConnected = ref(false);
+    const backendChecking = ref(true);
+    let liveDeviceCount = ref(0);
 
     const currentTime = ref('');
     const chatInput = ref('');
@@ -1396,11 +1409,33 @@ const app = createApp({
     }
 
     /* ── Lifecycle ── */
+    async function tryConnectBackend() {
+      try {
+        const h = await PetNodeAPI.health();
+        backendConnected.value = h.status === 'healthy';
+        console.log('[PetNode] 后端连接成功:', h);
+        // 尝试获取实时设备数
+        try {
+          const records = await PetNodeAPI.queryRecords({ limit: 1 });
+          if (records && records.count !== undefined) {
+            liveDeviceCount.value = records.count;
+          }
+        } catch (_) {}
+      } catch (err) {
+        console.warn('[PetNode] 后端连接失败，使用模拟数据:', err.message);
+        backendConnected.value = false;
+      } finally {
+        backendChecking.value = false;
+      }
+    }
+
     onMounted(() => {
       updateClock();
       clockTimer = setInterval(updateClock, 1000);
       applyBgOffset();
       nextTick(() => buildMapChart());
+      // 尝试连接后端
+      tryConnectBackend();
 
       // Handle resize
       window.addEventListener('resize', () => {
@@ -1432,6 +1467,7 @@ const app = createApp({
       dimensions, activePanel, mapContainer, curtainEl, infoboxEl, chatMessages,
       panelStatus, infobox, bgOffset, currentTime, chatInput, chatList,
       sendChat, setChartRef, onPanelChange, onTimeModeChange, resetBgOffset, mapEditMode, onMapWheel, bgScale, exitDashboard,
+      backendConnected, backendChecking, liveDeviceCount,
     };
   },
 });

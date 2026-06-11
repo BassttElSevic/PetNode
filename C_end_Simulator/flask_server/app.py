@@ -68,6 +68,7 @@ import os  # 读取环境变量
 from datetime import datetime  # 获取当前时间（用于日志）
 
 from flask import Flask, request, jsonify  # Flask 核心：应用、请求对象、JSON 响应
+from flask_cors import CORS  # 跨域支持
 
 
 # Robust import: prefer absolute package import (helps static analysis and tools),
@@ -95,6 +96,7 @@ logger = logging.getLogger("flask_server")
 
 # 创建 Flask 应用实例（__name__ 让 Flask 知道当前模块的位置）
 app = Flask(__name__)
+CORS(app, origins="*")  # 允许前端跨域请求（生产环境应限定具体域名）
 
 
 # ────────────────── CORS 支持（允许 Web 前端跨域调用）──────────────────
