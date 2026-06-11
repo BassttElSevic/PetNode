@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PetNode - 宠物智能健康枢纽</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/global.css">
+</head>
+<script src="js/main.js"></script>
+<body>
+
+    <aside id="sidebar">
+        <div class="brand">
+            <img src="assets/images/logo.png" alt="PETNODE" class="brand-logo">
+        </div>
+
+        <nav class="nav-menu">
+            <a href="#section-index" class="nav-item active">
+                <img src="assets/icons/home.png" class="nav-icon" alt="首页">
+                <span class="text">首页</span>
+            </a>
+            
+            <a href="#section-products" class="nav-item">
+                <img src="assets/icons/products.png" class="nav-icon" alt="PetNode产品">
+                <span class="text">PetNode产品</span>
+            </a>
+            
+            <a href="#section-explore" class="nav-item">
+                <img src="assets/icons/learningmore.png" class="nav-icon" alt="探索">
+                <span class="text">探索</span>
+            </a>
+
+            <div class="divider"></div>
+
+            <a href="#section-freetrial" class="nav-item highlight-item" id="dynamic-nav">
+                <img src="assets/icons/tryfree.png" class="nav-icon" id="dynamic-icon" alt="功能入口">
+                <span class="text" id="dynamic-text">免费试用</span>
+            </a>
+        </nav>
+
+
+        <div class="admin-toggle-wrapper">
+            <label class="admin-switch">
+                <input type="checkbox" id="admin-toggle-input">
+                <span class="toggle-track">
+                    <span class="toggle-thumb"></span>
+                </span>
+                <span class="toggle-label">管理员模式</span>
+            </label>
+        </div>
+
+        <div class="auth-area">
+            <div class="user-avatar-container">
+                <img src="assets/images/default_avatar.png" class="avatar-img" alt="用户">
+            </div>
+            <span class="user-action-text">登录 / 注册</span>
+        </div>
+    </aside>
+
+    <div id="overlay"></div>
+
+<main id="main-content">
+        
+        <section id="section-index" class="page-section video-section">
+            <video class="bg-video" autoplay loop muted playsinline>
+                <source src="assets/media/home_video.mp4" type="video/mp4">
+            </video>
+            <div class="video-overlay"></div>
+        </section>
+
+<section id="section-products" class="page-section product-section">
+            <div class="product-container">
+                <h2 class="section-title">寻找最适合的 PetNode 终端</h2>
+                
+                <div class="product-grid">
+                    <div class="product-card">
+                        <img src="assets/images/gear-large.png" class="product-img" alt="PetNode Max">
+                        <div class="product-info">
+                            <div class="card-title-top">PetNode Max</div>
+                            
+                            <h3 class="card-tag">FOR MED/LARGE DOGS</h3>
+                            <ul class="card-features">
+                                <li>一体化硬核抗冲外壳</li>
+                                <li>马尔可夫链自适应健康洞察算法</li>
+                                <li>超长 3 个月强劲续航时间</li>
+                            </ul>
+                            <div class="card-actions">
+                                <button class="btn btn-yellow">立即购买</button>
+                                <button class="btn btn-link">了解更多</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="product-card">
+                        <img src="assets/images/gear-medium.png" class="product-img" alt="PetNode Core">
+                        <div class="product-info">
+                            <div class="card-title-top">PetNode Core</div>
+                            
+                            <h3 class="card-tag">FOR STANDARD ADVENTURERS</h3>
+                            <ul class="card-features">
+                                <li>流线型日常全天候舒适结构</li>
+                                <li>高动态睡眠周期与行为拆解</li>
+                                <li>支持长达 2 个月强劲续航</li>
+                            </ul>
+                            <div class="card-actions">
+                                <button class="btn btn-yellow">立即购买</button>
+                                <button class="btn btn-link">了解更多</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="product-card">
+                        <img src="assets/images/gear-small.png" class="product-img" alt="PetNode Slim">
+                        <div class="product-info">
+                            <div class="card-title-top">PetNode Slim</div>
+                            
+                            <h3 class="card-tag">FOR LITTLE LEGENDS</h3>
+                            <ul class="card-features">
+                                <li>无感无负担超轻量化设计</li>
+                                <li>全天候精准生命体征数据追踪</li>
+                                <li>多重省电模式长效陪伴</li>
+                            </ul>
+                            <div class="card-actions">
+                                <button class="btn btn-yellow">立即购买</button>
+                                <button class="btn btn-link">了解更多</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+<section id="section-explore" class="page-section explore-section">
+            <div class="explore-container">
+                
+                <div class="explore-content-left">
+                    <h2 class="explore-title">一个 PetNode 小程序。<br>全周期的安心体验。</h2>
+                    <p class="explore-desc">依托高精度传感器，精准捕捉爱犬的呼吸率与睡眠周期等核心体征。实时 GPS 追踪、多设备无缝切换与家庭组数据共享，加上内置的专属宠物健康科普库——让您不仅是使用硬件，更是掌握专业的健康守护。</p>
+                    <button class="btn btn-yellow explore-btn">探索 PetNode 小程序</button>
+                </div>
+
+                <div class="explore-content-right">
+                    <video id="explore-video" class="explore-video" muted playsinline preload="auto">
+                        <source src="assets/media/Explor_1.mp4" type="video/mp4">
+                    </video>
+                </div>
+
+            </div>
+
+            <div class="explore-video-bottom">
+                <video id="explore-video-2" class="explore-video-full" loop autoplay muted playsinline preload="auto">
+                    <source src="assets/media/Explor_2.mp4" type="video/mp4">
+                </video>
+                <video id="explore-video-3" class="explore-video-full" loop autoplay muted playsinline preload="auto">
+                    <source src="assets/media/Explor_3.mp4" type="video/mp4">
+                </video>
+            </div>
+        </section>
+
+        <section id="section-freetrial" class="page-section freetrial-section">
+            <div class="freetrial-container">
+                <div class="freetrial-left">
+                    <span class="freetrial-tag">FREE TRIAL</span>
+                    <h2 class="freetrial-title">免费试用<br>PetNode</h2>
+                    <p class="freetrial-desc">申请获取为期 1 个月的免费试用设备，让您零成本体验 PetNode 带来的全方位爱宠健康与安全守护。</p>
+                    <button class="btn btn-yellow freetrial-btn">免费申请试用</button>
+                </div>
+                <div class="freetrial-right">
+                    <div class="freetrial-img-wrapper">
+                        <img src="assets/images/Try_for_free.png" alt="PetNode 免费试用设备" class="freetrial-img">
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+
+    <div id="login-overlay" class="login-overlay-hidden">
+        <div class="login-modal">
+            <button class="login-close-btn" id="login-close-btn">&times;</button>
+
+            <div class="login-header">
+                <img src="assets/images/logo.png" alt="PetNode" class="login-logo">
+                <span class="login-brand">PetNode</span>
+            </div>
+
+            <!-- User Login View -->
+            <div class="login-view login-view-user" id="login-view-user">
+                <div class="login-input-group">
+                    <input type="tel" class="login-input" placeholder="手机号码">
+                </div>
+                <div class="login-input-group login-input-code">
+                    <input type="text" class="login-input" placeholder="验证码">
+                    <button type="button" class="login-code-btn" id="login-code-btn">发送验证码</button>
+                </div>
+                <div class="login-agreement">
+                    <input type="checkbox" id="login-agree-check">
+                    <label for="login-agree-check">已同意<a href="#">《用户注册协议》</a><a href="#">《个人信息保护政策》</a>和<a href="#">《儿童个人信息保护政策》</a></label>
+                </div>
+                <button type="button" class="login-main-btn" id="login-user-btn">注册/登录</button>
+                <p class="login-switch-text" id="login-password-link">密码登录</p>
+                <img src="assets/icons/Endministrator_test.png" class="login-admin-trigger" id="login-admin-trigger" alt="管理员入口" title="管理员登录">
+            </div>
+
+            <!-- Admin Login View -->
+            <div class="login-view login-view-admin" id="login-view-admin" style="display:none;">
+                <div class="login-input-group">
+                    <input type="text" class="login-input" id="admin-username" placeholder="用户名">
+                </div>
+                <div class="login-input-group">
+                    <input type="password" class="login-input" id="admin-password" placeholder="密码">
+                </div>
+                <button type="button" class="login-main-btn" id="login-admin-btn">管理员登录</button>
+                <p class="login-switch-text login-back-user" id="login-back-user">← 返回用户登录</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

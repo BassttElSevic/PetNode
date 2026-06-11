@@ -1,0 +1,682 @@
+/* ==========================================
+   Admin Toggle - Sidebar Integration
+   ========================================== */
+.admin-toggle-wrapper {
+    margin-top: auto;
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.admin-switch {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.admin-switch input {
+    display: none;
+}
+
+.toggle-track {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    position: relative;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #555;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+                background 0.3s ease,
+                box-shadow 0.3s ease;
+}
+
+.admin-switch input:checked + .toggle-track {
+    background: rgba(0, 229, 255, 0.25);
+}
+
+.admin-switch input:checked + .toggle-track .toggle-thumb {
+    transform: translateX(16px);
+    background: #00e5ff;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+}
+
+.toggle-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sidebar-muted);
+    margin-left: 18px;
+    opacity: 0;
+    transform: translateX(10px);
+    transition: opacity 0.2s, transform 0.3s, color 0.2s;
+}
+
+#sidebar:hover .toggle-label {
+    opacity: 1;
+    transform: translateX(0);
+    transition-delay: 0.1s;
+}
+
+.admin-switch input:checked ~ .toggle-label {
+    color: #00e5ff;
+}
+
+/* ==========================================
+   Admin Overlay - Full Screen Dashboard
+   ========================================== */
+#admin-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: #050505;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+#admin-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.admin-dashboard {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+}
+
+/* ---- Close Button ---- */
+.admin-close-btn {
+    position: absolute;
+    top: 28px;
+    right: 32px;
+    width: 42px;
+    height: 42px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.admin-close-btn:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.25);
+    transform: rotate(90deg);
+}
+
+.admin-close-btn span {
+    position: absolute;
+    width: 18px;
+    height: 1.5px;
+    background: #777;
+    transition: background 0.2s;
+}
+
+.admin-close-btn:hover span {
+    background: #fff;
+}
+
+.admin-close-btn span:first-child  { transform: rotate(45deg); }
+.admin-close-btn span:last-child   { transform: rotate(-45deg); }
+
+/* ==========================================
+   Left Panel (50%) - Map + Briefing
+   ========================================== */
+.admin-panel-left {
+    flex: 0 0 50%;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ---- Map Area (2/3 height) ---- */
+.map-area {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 32px 14px;
+    z-index: 5;
+}
+
+.map-header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.map-live-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #ff3b5c;
+    background: rgba(255, 59, 92, 0.08);
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 59, 92, 0.15);
+}
+
+.pulse-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff3b5c;
+    animation: admin-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes admin-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 59, 92, 0.6); }
+    50%      { opacity: 0.4; box-shadow: 0 0 0 7px rgba(255, 59, 92, 0); }
+}
+
+.map-title {
+    font-size: 13px;
+    color: #999;
+    letter-spacing: 0.5px;
+}
+
+.map-coords {
+    font-size: 12px;
+    color: #555;
+    font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+    letter-spacing: 1px;
+}
+
+/* ---- Map Viewport ---- */
+.map-viewport {
+    flex: 1;
+    position: relative;
+    margin: 0 24px 24px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #080d15;
+}
+
+.map-layer {
+    position: absolute;
+    inset: 0;
+    transition: opacity 0.5s ease;
+}
+
+/* Base map - contains SVG */
+.map-base {
+    background-color: #080d15;
+}
+
+.map-base svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Heatmap layer */
+.map-heat {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.map-heat.active {
+    opacity: 1;
+}
+
+/* Heat spots */
+.heat-spot {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(18px);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+}
+
+.map-heat.active .heat-spot {
+    opacity: 0.55;
+}
+
+/* Density dots */
+.heat-dot {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+}
+
+.map-heat.active .heat-dot {
+    opacity: 0.7;
+}
+
+/* Grid overlay */
+.map-grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(to right, rgba(0, 229, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 229, 255, 0.025) 1px, transparent 1px);
+    background-size: 80px 80px;
+    z-index: 2;
+}
+
+/* Crosshair reticle */
+.map-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.map-crosshair::before,
+.map-crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(0, 229, 255, 0.12);
+}
+
+.map-crosshair::before {
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+}
+
+.map-crosshair::after {
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+}
+
+/* ---- Curtain ---- */
+.map-curtain {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #050505;
+    transform: translateY(-100%);
+    z-index: 20;
+    pointer-events: none;
+}
+
+.map-curtain.animating {
+    transition: transform 0.35s cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+/* ---- Briefing Area (1/3 height) ---- */
+.briefing-area {
+    flex: 1;
+    padding: 0 32px 28px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.briefing-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.briefing-line {
+    width: 2px;
+    height: 26px;
+    background: #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.briefing-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #e0e0e0;
+    letter-spacing: 6px;
+}
+
+.briefing-body {
+    position: relative;
+    flex: 1;
+}
+
+.briefing-text {
+    color: #777;
+    font-size: 13.5px;
+    line-height: 2;
+    transition: opacity 0.25s ease;
+    margin: 0;
+}
+
+.briefing-text.fading {
+    opacity: 0;
+}
+
+/* ==========================================
+   Right Panel (50%) - Accordion Console
+   ========================================== */
+.admin-panel-right {
+    flex: 0 0 50%;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+}
+
+.console-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.console-icon {
+    font-size: 20px;
+    color: #00e5ff;
+}
+
+.console-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #bbb;
+    letter-spacing: 2px;
+}
+
+.console-status {
+    font-size: 13px;
+    color: #4a4;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    letter-spacing: 0.5px;
+}
+
+/* ---- Accordion ---- */
+.accordion {
+    flex: 1;
+    padding: 14px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow-y: auto;
+}
+
+.accordion::-webkit-scrollbar {
+    width: 3px;
+}
+
+.accordion::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.accordion::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+}
+
+.accordion-item {
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
+    transition: border-color 0.3s ease;
+}
+
+.accordion-item:hover {
+    border-color: rgba(255,255,255,0.08);
+}
+
+.accordion-item.active {
+    border-color: rgba(0, 229, 255, 0.18);
+}
+
+.accordion-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    background: rgba(255,255,255,0.015);
+    border: none;
+    color: #999;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    letter-spacing: 0.5px;
+    transition: background 0.2s, color 0.2s;
+    font-family: inherit;
+}
+
+.accordion-trigger:hover {
+    background: rgba(255,255,255,0.03);
+    color: #bbb;
+}
+
+.accordion-item.active .accordion-trigger {
+    color: #e0e0e0;
+    background: rgba(0, 229, 255, 0.025);
+}
+
+.accordion-marker {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    flex-shrink: 0;
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+.accordion-item.active .accordion-marker {
+    background: #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.accordion-title {
+    flex: 1;
+}
+
+.accordion-arrow {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    position: relative;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.accordion-arrow::before,
+.accordion-arrow::after {
+    content: '';
+    position: absolute;
+    background: #555;
+    transition: background 0.3s;
+}
+
+.accordion-arrow::before {
+    top: 50%;
+    left: 1px;
+    width: 16px;
+    height: 1.5px;
+    margin-top: -0.75px;
+}
+
+.accordion-arrow::after {
+    left: 50%;
+    top: 1px;
+    width: 1.5px;
+    height: 16px;
+    margin-left: -0.75px;
+}
+
+.accordion-item.active .accordion-arrow {
+    transform: rotate(180deg);
+}
+
+.accordion-item.active .accordion-arrow::before,
+.accordion-item.active .accordion-arrow::after {
+    background: #00e5ff;
+}
+
+/* Panel body */
+.accordion-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.accordion-item.active .accordion-panel {
+    max-height: 350px;
+}
+
+.accordion-content {
+    padding: 18px 20px 20px;
+    border-top: 1px solid rgba(255,255,255,0.035);
+}
+
+.accordion-content .metric-row {
+    margin-bottom: 18px;
+}
+
+.accordion-content .metric-row:last-child {
+    margin-bottom: 0;
+}
+
+.accordion-content .metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 7px;
+}
+
+.accordion-content .metric-label {
+    font-size: 13px;
+    color: #999;
+    letter-spacing: 0.8px;
+}
+
+.accordion-content .metric-value {
+    font-size: 13.5px;
+    color: #ccc;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-weight: 600;
+}
+
+.accordion-content .metric-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.accordion-content .metric-fill {
+    height: 100%;
+    border-radius: 2px;
+    width: 0;
+    transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ==========================================
+   Responsive
+   ========================================== */
+@media (max-width: 1100px) {
+    .admin-dashboard {
+        flex-direction: column;
+    }
+
+    .admin-panel-left {
+        flex: 0 0 55%;
+    }
+
+    .admin-panel-right {
+        flex: 1;
+    }
+
+    .map-header {
+        padding: 16px 20px 10px;
+    }
+
+    .map-viewport {
+        margin: 0 16px 16px;
+    }
+
+    .briefing-area {
+        padding: 0 20px 20px;
+    }
+
+    .console-header {
+        padding: 20px 20px 16px;
+    }
+
+    .accordion {
+        padding: 10px 16px;
+    }
+}
+
+@media (max-width: 700px) {
+    .admin-panel-left {
+        flex: 0 0 50%;
+    }
+
+    .map-title,
+    .map-coords {
+        font-size: 10px;
+    }
+
+    .briefing-text {
+        font-size: 11px;
+        line-height: 1.7;
+    }
+
+    .admin-close-btn {
+        top: 14px;
+        right: 14px;
+        width: 34px;
+        height: 34px;
+    }
+}
