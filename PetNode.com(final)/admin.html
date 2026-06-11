@@ -471,96 +471,78 @@
 </script>
 
 <script type="module">
-import { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { createApp, ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import ElementPlus from 'element-plus';
 import * as echarts from 'echarts';
 
+const API_BASE = (() => {
+  const o = localStorage.getItem('petnode_api_base');
+  if (o) return o;
+  if (window.location.port === '5000') return window.location.origin + '/api/v1';
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5000/api/v1';
+  return '/api/v1';
+})();
+
+function apiUrl(path) {
+  const base = API_BASE.replace(/\/+$/, '');
+  const p = path.replace(/^\/+/, '');
+  return base + '/' + p;
+}
+
+async function fetchJSON(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (e) {
+    console.warn('[PetNode] fetch failed:', url, e.message);
+    return null;
+  }
+}
+
+function behaviorToStatus(b) {
+  switch (b) {
+    case 'running': case 'walking': return '运动';
+    case 'resting': return '静息';
+    case 'sleeping': return '睡眠';
+    default: return '静息';
+  }
+}
+
 const app = createApp({
   setup() {
-    /* ================================================================
-       Mock Data — 7 dimensions aligned with the data dictionary
-       ================================================================ */
-
-    // Chongqing districts with real lat/lng centers
+    // ── Chongqing districts ──
     const districts = [
-      { name: '渝北区', lng: 106.49, lat: 29.62, devices: 26 },
-      { name: '江北区', lng: 106.51, lat: 29.59, devices: 22 },
-      { name: '沙坪坝区', lng: 106.43, lat: 29.56, devices: 20 },
-      { name: '渝中区', lng: 106.53, lat: 29.56, devices: 14 },
-      { name: '南岸区', lng: 106.54, lat: 29.53, devices: 21 },
-      { name: '九龙坡区', lng: 106.47, lat: 29.52, devices: 19 },
-      { name: '大渡口区', lng: 106.45, lat: 29.50, devices: 12 },
-      { name: '巴南区', lng: 106.52, lat: 29.48, devices: 18 },
+      { name: '渝北区', lng: 106.49, lat: 29.62, devices: 0 },
+      { name: '江北区', lng: 106.51, lat: 29.59, devices: 0 },
+      { name: '沙坪坝区', lng: 106.43, lat: 29.56, devices: 0 },
+      { name: '渝中区', lng: 106.53, lat: 29.56, devices: 0 },
+      { name: '南岸区', lng: 106.54, lat: 29.53, devices: 0 },
+      { name: '九龙坡区', lng: 106.47, lat: 29.52, devices: 0 },
+      { name: '大渡口区', lng: 106.45, lat: 29.50, devices: 0 },
+      { name: '巴南区', lng: 106.52, lat: 29.48, devices: 0 },
     ];
 
-    // Hand-crafted test data covering all threshold edge cases
-    const allDevices = [
-      // ===== 渝北区 (7 devices) =====
-      { deviceId:'PN0001', district:'渝北区', lng:106.48, lat:29.64, dogSize:'大型犬', heartRate:155, status:'运动', respRate:35, temperature:39.8, pace:95, anomaly:'心脏异常' },
-      { deviceId:'PN0002', district:'渝北区', lng:106.49, lat:29.63, dogSize:'大型犬', heartRate:148, status:'运动', respRate:32, temperature:39.2, pace:88, anomaly:'心脏异常' },
-      { deviceId:'PN0003', district:'渝北区', lng:106.47, lat:29.62, dogSize:'大型犬', heartRate:90,  status:'静息', respRate:18, temperature:38.3, pace:20,  anomaly:'无异常' },
-      { deviceId:'PN0004', district:'渝北区', lng:106.50, lat:29.61, dogSize:'中型犬', heartRate:72,  status:'睡眠', respRate:12, temperature:37.8, pace:5,   anomaly:'无异常' },
-      { deviceId:'PN0005', district:'渝北区', lng:106.48, lat:29.60, dogSize:'大型犬', heartRate:55,  status:'静息', respRate:9,  temperature:37.2, pace:15,  anomaly:'无异常' },
-      { deviceId:'PN0006', district:'渝北区', lng:106.51, lat:29.62, dogSize:'小型犬', heartRate:105, status:'运动', respRate:22, temperature:38.5, pace:60,  anomaly:'无异常' },
-      { deviceId:'PN0007', district:'渝北区', lng:106.49, lat:29.59, dogSize:'大型犬', heartRate:160, status:'运动', respRate:38, temperature:40.1, pace:105, anomaly:'心脏异常' },
+    function assignDistrict(lat, lng) {
+      const centers = [
+        { name:'渝北区', lat:29.62, lng:106.49 }, { name:'江北区', lat:29.59, lng:106.51 },
+        { name:'沙坪坝区', lat:29.56, lng:106.44 }, { name:'渝中区', lat:29.56, lng:106.53 },
+        { name:'南岸区', lat:29.53, lng:106.54 }, { name:'九龙坡区', lat:29.52, lng:106.47 },
+        { name:'大渡口区', lat:29.50, lng:106.45 }, { name:'巴南区', lat:29.48, lng:106.52 },
+      ];
+      let best = '渝北区', bestDist = Infinity;
+      for (const c of centers) {
+        const d = Math.hypot(lat - c.lat, lng - c.lng);
+        if (d < bestDist) { bestDist = d; best = c.name; }
+      }
+      return best;
+    }
 
-      // ===== 江北区 (7 devices) =====
-      { deviceId:'PN0008', district:'江北区', lng:106.50, lat:29.60, dogSize:'中型犬', heartRate:88,  status:'静息', respRate:16, temperature:38.2, pace:25,  anomaly:'无异常' },
-      { deviceId:'PN0009', district:'江北区', lng:106.52, lat:29.59, dogSize:'小型犬', heartRate:110, status:'运动', respRate:24, temperature:38.6, pace:72,  anomaly:'无异常' },
-      { deviceId:'PN0010', district:'江北区', lng:106.51, lat:29.58, dogSize:'大型犬', heartRate:52,  status:'睡眠', respRate:8,  temperature:37.0, pace:3,   anomaly:'骨骼异常' },
-      { deviceId:'PN0011', district:'江北区', lng:106.53, lat:29.60, dogSize:'中型犬', heartRate:75,  status:'静息', respRate:14, temperature:38.0, pace:18,  anomaly:'无异常' },
-      { deviceId:'PN0012', district:'江北区', lng:106.50, lat:29.57, dogSize:'小型犬', heartRate:95,  status:'运动', respRate:20, temperature:38.4, pace:55,  anomaly:'无异常' },
-      { deviceId:'PN0013', district:'江北区', lng:106.52, lat:29.61, dogSize:'大型犬', heartRate:142, status:'运动', respRate:30, temperature:39.0, pace:92,  anomaly:'呼吸异常' },
-      { deviceId:'PN0014', district:'江北区', lng:106.49, lat:29.58, dogSize:'中型犬', heartRate:68,  status:'睡眠', respRate:11, temperature:37.5, pace:8,   anomaly:'无异常' },
-
-      // ===== 沙坪坝区 (8 devices - hotspot for anomalies) =====
-      { deviceId:'PN0015', district:'沙坪坝区', lng:106.42, lat:29.57, dogSize:'中型犬', heartRate:150, status:'运动', respRate:34, temperature:39.5, pace:90,  anomaly:'心脏异常' },
-      { deviceId:'PN0016', district:'沙坪坝区', lng:106.44, lat:29.56, dogSize:'大型犬', heartRate:145, status:'静息', respRate:28, temperature:39.3, pace:35,  anomaly:'心脏异常' },
-      { deviceId:'PN0017', district:'沙坪坝区', lng:106.43, lat:29.55, dogSize:'小型犬', heartRate:165, status:'运动', respRate:36, temperature:40.0, pace:98,  anomaly:'心脏异常' },
-      { deviceId:'PN0018', district:'沙坪坝区', lng:106.45, lat:29.58, dogSize:'中型犬', heartRate:58,  status:'睡眠', respRate:9,  temperature:37.1, pace:4,   anomaly:'呼吸异常' },
-      { deviceId:'PN0019', district:'沙坪坝区', lng:106.41, lat:29.54, dogSize:'大型犬', heartRate:135, status:'运动', respRate:29, temperature:38.9, pace:85,  anomaly:'呼吸异常' },
-      { deviceId:'PN0020', district:'沙坪坝区', lng:106.44, lat:29.56, dogSize:'小型犬', heartRate:80,  status:'静息', respRate:15, temperature:38.1, pace:22,  anomaly:'无异常' },
-      { deviceId:'PN0021', district:'沙坪坝区', lng:106.43, lat:29.53, dogSize:'中型犬', heartRate:48,  status:'睡眠', respRate:7,  temperature:36.8, pace:2,   anomaly:'骨骼异常' },
-      { deviceId:'PN0022', district:'沙坪坝区', lng:106.46, lat:29.55, dogSize:'大型犬', heartRate:95,  status:'静息', respRate:17, temperature:38.3, pace:28,  anomaly:'无异常' },
-
-      // ===== 渝中区 (5 devices) =====
-      { deviceId:'PN0023', district:'渝中区', lng:106.53, lat:29.56, dogSize:'小型犬', heartRate:100, status:'静息', respRate:19, temperature:38.2, pace:30,  anomaly:'无异常' },
-      { deviceId:'PN0024', district:'渝中区', lng:106.54, lat:29.55, dogSize:'小型犬', heartRate:85,  status:'静息', respRate:16, temperature:38.0, pace:22,  anomaly:'无异常' },
-      { deviceId:'PN0025', district:'渝中区', lng:106.52, lat:29.57, dogSize:'中型犬', heartRate:50,  status:'睡眠', respRate:8,  temperature:36.9, pace:3,   anomaly:'骨骼异常' },
-      { deviceId:'PN0026', district:'渝中区', lng:106.53, lat:29.55, dogSize:'小型犬', heartRate:92,  status:'静息', respRate:18, temperature:38.1, pace:26,  anomaly:'无异常' },
-      { deviceId:'PN0027', district:'渝中区', lng:106.54, lat:29.56, dogSize:'小型犬', heartRate:108, status:'运动', respRate:22, temperature:38.5, pace:58,  anomaly:'无异常' },
-
-      // ===== 南岸区 (7 devices) =====
-      { deviceId:'PN0028', district:'南岸区', lng:106.55, lat:29.54, dogSize:'中型犬', heartRate:78,  status:'静息', respRate:15, temperature:38.0, pace:20,  anomaly:'无异常' },
-      { deviceId:'PN0029', district:'南岸区', lng:106.53, lat:29.53, dogSize:'大型犬', heartRate:140, status:'运动', respRate:31, temperature:39.1, pace:86,  anomaly:'无异常' },
-      { deviceId:'PN0030', district:'南岸区', lng:106.56, lat:29.52, dogSize:'小型犬', heartRate:55,  status:'睡眠', respRate:10, temperature:37.3, pace:6,   anomaly:'无异常' },
-      { deviceId:'PN0031', district:'南岸区', lng:106.54, lat:29.55, dogSize:'中型犬', heartRate:92,  status:'运动', respRate:21, temperature:38.4, pace:65,  anomaly:'无异常' },
-      { deviceId:'PN0032', district:'南岸区', lng:106.55, lat:29.51, dogSize:'大型犬', heartRate:45,  status:'睡眠', respRate:7,  temperature:36.7, pace:2,   anomaly:'呼吸异常' },
-      { deviceId:'PN0033', district:'南岸区', lng:106.52, lat:29.54, dogSize:'小型犬', heartRate:115, status:'运动', respRate:25, temperature:38.7, pace:75,  anomaly:'无异常' },
-      { deviceId:'PN0034', district:'南岸区', lng:106.57, lat:29.53, dogSize:'中型犬', heartRate:68,  status:'静息', respRate:13, temperature:37.9, pace:16,  anomaly:'无异常' },
-
-      // ===== 九龙坡区 (6 devices) =====
-      { deviceId:'PN0035', district:'九龙坡区', lng:106.48, lat:29.53, dogSize:'中型犬', heartRate:82,  status:'静息', respRate:16, temperature:38.1, pace:22,  anomaly:'无异常' },
-      { deviceId:'PN0036', district:'九龙坡区', lng:106.46, lat:29.52, dogSize:'小型犬', heartRate:60,  status:'睡眠', respRate:11, temperature:37.4, pace:5,   anomaly:'无异常' },
-      { deviceId:'PN0037', district:'九龙坡区', lng:106.49, lat:29.51, dogSize:'大型犬', heartRate:130, status:'运动', respRate:27, temperature:38.8, pace:82,  anomaly:'心脏异常' },
-      { deviceId:'PN0038', district:'九龙坡区', lng:106.47, lat:29.54, dogSize:'中型犬', heartRate:70,  status:'静息', respRate:14, temperature:37.8, pace:18,  anomaly:'无异常' },
-      { deviceId:'PN0039', district:'九龙坡区', lng:106.50, lat:29.52, dogSize:'小型犬', heartRate:98,  status:'运动', respRate:20, temperature:38.5, pace:62,  anomaly:'无异常' },
-      { deviceId:'PN0040', district:'九龙坡区', lng:106.47, lat:29.50, dogSize:'大型犬', heartRate:53,  status:'睡眠', respRate:8,  temperature:37.0, pace:4,   anomaly:'无异常' },
-
-      // ===== 大渡口区 (5 devices) =====
-      { deviceId:'PN0041', district:'大渡口区', lng:106.46, lat:29.51, dogSize:'小型犬', heartRate:88,  status:'静息', respRate:17, temperature:38.0, pace:24,  anomaly:'无异常' },
-      { deviceId:'PN0042', district:'大渡口区', lng:106.44, lat:29.50, dogSize:'中型犬', heartRate:65,  status:'睡眠', respRate:12, temperature:37.6, pace:7,   anomaly:'无异常' },
-      { deviceId:'PN0043', district:'大渡口区', lng:106.47, lat:29.49, dogSize:'小型犬', heartRate:102, status:'运动', respRate:21, temperature:38.3, pace:56,  anomaly:'无异常' },
-      { deviceId:'PN0044', district:'大渡口区', lng:106.45, lat:29.52, dogSize:'中型犬', heartRate:76,  status:'静息', respRate:15, temperature:38.1, pace:19,  anomaly:'无异常' },
-      { deviceId:'PN0045', district:'大渡口区', lng:106.46, lat:29.48, dogSize:'小型犬', heartRate:95,  status:'静息', respRate:18, temperature:38.2, pace:28,  anomaly:'无异常' },
-
-      // ===== 巴南区 (5 devices) =====
-      { deviceId:'PN0046', district:'巴南区', lng:106.52, lat:29.49, dogSize:'大型犬', heartRate:72,  status:'静息', respRate:14, temperature:38.0, pace:20,  anomaly:'无异常' },
-      { deviceId:'PN0047', district:'巴南区', lng:106.53, lat:29.47, dogSize:'中型犬', heartRate:56,  status:'睡眠', respRate:10, temperature:37.2, pace:6,   anomaly:'无异常' },
-      { deviceId:'PN0048', district:'巴南区', lng:106.50, lat:29.48, dogSize:'小型犬', heartRate:106, status:'运动', respRate:23, temperature:38.6, pace:68,  anomaly:'无异常' },
-      { deviceId:'PN0049', district:'巴南区', lng:106.54, lat:29.50, dogSize:'中型犬', heartRate:85,  status:'静息', respRate:17, temperature:38.3, pace:24,  anomaly:'无异常' },
-      { deviceId:'PN0050', district:'巴南区', lng:106.51, lat:29.46, dogSize:'大型犬', heartRate:47,  status:'睡眠', respRate:6,  temperature:36.5, pace:2,   anomaly:'无异常' },
-    ];
+    // ── Reactive device data from API ──
+    const liveDevices = ref([]);
+    const liveAnomalies = ref([]);
+    let refreshTimer = null;
 
     /* ── 7 Dimensions ── */
     const dimensions = reactive([
@@ -568,32 +550,26 @@ const app = createApp({
         id: 'dogSize',
         title: '设备绑定犬型分布',
         timeMode: 'realtime',
-        alerts: {
-          realtime: '渝北区大型犬项圈占比异常偏高 (56%)，建议关注大型犬运动量管理',
-          '24h': '过去24小时新增绑定大型犬 3 台、中型犬 2 台、小型犬 1 台，比率正常',
-          '7d': '过去7天大型犬新增绑定 12 台，中型犬仅 3 台，比例失衡',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '大型犬', value: '42%', color: '#ff3b5c' },
-          { label: '中型犬', value: '35%', color: '#448aff' },
-          { label: '小型犬', value: '23%', color: '#00e676' },
+          { label: '大型犬', value: '0%', color: '#ff3b5c' },
+          { label: '中型犬', value: '0%', color: '#448aff' },
+          { label: '小型犬', value: '0%', color: '#00e676' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { '大型犬':0, '中型犬':0, '小型犬':0 };
+          devs.forEach(d => { c[d.dogSize] = (c[d.dogSize]||0) + 1; });
+          const total = devs.length;
           return [
-            { value: 42, name: '大型犬', itemStyle: { color: '#ff3b5c' } },
-            { value: 35, name: '中型犬', itemStyle: { color: '#448aff' } },
-            { value: 23, name: '小型犬', itemStyle: { color: '#00e676' } },
-          ];
+            { value: +(c['大型犬']/total*100).toFixed(1), name:'大型犬', itemStyle:{color:'#ff3b5c'} },
+            { value: +(c['中型犬']/total*100).toFixed(1), name:'中型犬', itemStyle:{color:'#448aff'} },
+            { value: +(c['小型犬']/total*100).toFixed(1), name:'小型犬', itemStyle:{color:'#00e676'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东(南岸/巴南)', '渝南(九龙坡/大渡口)', '渝西(沙坪坝)', '渝北(江北/渝北)'],
-            series: [
-              { name: '大型犬', data: [14, 10, 8, 16], color: '#ff3b5c' },
-              { name: '中型犬', data: [12, 8, 7, 10], color: '#448aff' },
-              { name: '小型犬', data: [8, 6, 5, 7], color: '#00e676' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
           return d.dogSize === '大型犬' ? '#ff3b5c' : d.dogSize === '中型犬' ? '#448aff' : '#00e676';
@@ -603,40 +579,34 @@ const app = createApp({
         id: 'heartRate',
         title: '宠物实时心率分布',
         timeMode: 'realtime',
-        alerts: {
-          realtime: '沙坪坝区域 5 例心率异常预警 (心动过速)，请关注该区域宠物运动强度',
-          '24h': '过去24小时心率异常波动集中出现在午间12:00-14:00高温时段',
-          '7d': '近7日整体心率异常趋势下降 2.3%，健康状况改善',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '正常 (60-140)', value: '94.2%', color: '#00e676' },
-          { label: '偶发心动过速', value: '3.1%', color: '#ff9100' },
-          { label: '静息心率偏低', value: '1.8%', color: '#ffc400' },
-          { label: '异常预警', value: '0.9%', color: '#ff3b5c' },
+          { label: '正常 (60-140)', value: '0%', color: '#00e676' },
+          { label: '心动过速', value: '0%', color: '#ff9100' },
+          { label: '心率偏低', value: '0%', color: '#ffc400' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { normal:0, fast:0, slow:0 };
+          devs.forEach(d => {
+            if (d.heartRate > 140) c.fast++;
+            else if (d.heartRate < 60) c.slow++;
+            else c.normal++;
+          });
+          const total = devs.length;
           return [
-            { value: 94.2, name: '正常', itemStyle: { color: '#00e676' } },
-            { value: 3.1, name: '心动过速', itemStyle: { color: '#ff9100' } },
-            { value: 1.8, name: '心率偏低', itemStyle: { color: '#ffc400' } },
-            { value: 0.9, name: '异常预警', itemStyle: { color: '#ff3b5c' } },
-          ];
+            { value: +(c.normal/total*100).toFixed(1), name:'正常', itemStyle:{color:'#00e676'} },
+            { value: +(c.fast/total*100).toFixed(1), name:'心动过速', itemStyle:{color:'#ff9100'} },
+            { value: +(c.slow/total*100).toFixed(1), name:'心率偏低', itemStyle:{color:'#ffc400'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '正常', data: [92, 95, 88, 96], color: '#00e676' },
-              { name: '心动过速', data: [5, 2, 8, 2], color: '#ff9100' },
-              { name: '心率偏低', data: [2, 2, 3, 1], color: '#ffc400' },
-              { name: '异常', data: [1, 1, 1, 1], color: '#ff3b5c' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
-          const hr = d.heartRate;
-          if (hr > 140) return '#ff3b5c';
-          if (hr < 60) return '#ff9100';
+          if (d.heartRate > 140) return '#ff3b5c';
+          if (d.heartRate < 60) return '#ff9100';
           return '#00e676';
         },
       },
@@ -644,32 +614,26 @@ const app = createApp({
         id: 'status',
         title: '宠物当前行为状态',
         timeMode: 'realtime',
-        alerts: {
-          realtime: '渝中区宠物静息时间过长 (日均16h)，运动严重不足',
-          '24h': '过去24小时全市运动占比 28%，较昨日下降 5%，高温天气影响明显',
-          '7d': '全市宠物运动活跃度较上周下降 8%，建议推送运动提醒',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '运动', value: '28%', color: '#ff3b5c' },
-          { label: '静息', value: '45%', color: '#00e676' },
-          { label: '睡眠', value: '27%', color: '#448aff' },
+          { label: '运动', value: '0%', color: '#ff3b5c' },
+          { label: '静息', value: '0%', color: '#00e676' },
+          { label: '睡眠', value: '0%', color: '#448aff' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { '运动':0, '静息':0, '睡眠':0 };
+          devs.forEach(d => { c[d.status] = (c[d.status]||0) + 1; });
+          const total = devs.length;
           return [
-            { value: 28, name: '运动', itemStyle: { color: '#ff3b5c' } },
-            { value: 45, name: '静息', itemStyle: { color: '#00e676' } },
-            { value: 27, name: '睡眠', itemStyle: { color: '#448aff' } },
-          ];
+            { value: +(c['运动']/total*100).toFixed(1), name:'运动', itemStyle:{color:'#ff3b5c'} },
+            { value: +(c['静息']/total*100).toFixed(1), name:'静息', itemStyle:{color:'#00e676'} },
+            { value: +(c['睡眠']/total*100).toFixed(1), name:'睡眠', itemStyle:{color:'#448aff'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '运动', data: [30, 25, 22, 35], color: '#ff3b5c' },
-              { name: '静息', data: [42, 48, 50, 40], color: '#00e676' },
-              { name: '睡眠', data: [28, 27, 28, 25], color: '#448aff' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
           return d.status === '运动' ? '#ff3b5c' : d.status === '静息' ? '#00e676' : '#448aff';
@@ -679,38 +643,34 @@ const app = createApp({
         id: 'respiration',
         title: '宠物呼吸频率监测',
         timeMode: 'realtime',
-        regionalAlert: '⚠ 南岸区南部 3 例呼吸频率持续过快 (>40次/分)，疑似高温应激或呼吸道感染！',
-        alerts: {
-          realtime: '南岸区 3 例呼吸频率过快 (>40次/分)，疑似高温应激反应',
-          '24h': '过去24小时呼吸频率峰值出现在 14:00，与气温正相关 r=0.72',
-          '7d': '近7日呼吸频率异常趋势平稳，过快占比 9%，较上周无明显变化',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '正常 (10-30)', value: '88%', color: '#00e676' },
-          { label: '过慢 (<10)', value: '3%', color: '#ff9100' },
-          { label: '过快 (>30)', value: '9%', color: '#ff3b5c' },
+          { label: '正常 (10-30)', value: '0%', color: '#00e676' },
+          { label: '过慢 (<10)', value: '0%', color: '#ff9100' },
+          { label: '过快 (>30)', value: '0%', color: '#ff3b5c' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { normal:0, slow:0, fast:0 };
+          devs.forEach(d => {
+            if (d.respRate > 30) c.fast++;
+            else if (d.respRate < 10) c.slow++;
+            else c.normal++;
+          });
+          const total = devs.length;
           return [
-            { value: 88, name: '正常', itemStyle: { color: '#00e676' } },
-            { value: 3, name: '过慢', itemStyle: { color: '#ff9100' } },
-            { value: 9, name: '过快', itemStyle: { color: '#ff3b5c' } },
-          ];
+            { value: +(c.normal/total*100).toFixed(1), name:'正常', itemStyle:{color:'#00e676'} },
+            { value: +(c.fast/total*100).toFixed(1), name:'过快', itemStyle:{color:'#ff3b5c'} },
+            { value: +(c.slow/total*100).toFixed(1), name:'过慢', itemStyle:{color:'#ff9100'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '正常', data: [85, 90, 88, 89], color: '#00e676' },
-              { name: '过慢', data: [3, 2, 4, 3], color: '#ff9100' },
-              { name: '过快', data: [12, 8, 8, 8], color: '#ff3b5c' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
-          const rr = d.respRate;
-          if (rr > 30) return '#ff3b5c';
-          if (rr < 10) return '#ff9100';
+          if (d.respRate > 30) return '#ff3b5c';
+          if (d.respRate < 10) return '#ff9100';
           return '#00e676';
         },
       },
@@ -718,38 +678,34 @@ const app = createApp({
         id: 'temperature',
         title: '宠物体温状态',
         timeMode: 'realtime',
-        regionalAlert: '⚠ 巴南区 2 例宠物体温超 39.5°C，疑似中暑或感染性发热，建议立即排查！',
-        alerts: {
-          realtime: '巴南区 2 例宠物体温过高 (>39.5°C)，建议立即降温处理',
-          '24h': '过去24小时体温异常集中在 12:00-16:00 高温时段，巴南区为高风险区',
-          '7d': '近7日全市平均体温 38.3°C，较上周下降 0.2°C，季节性回调',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '正常 (37.5-39.0)', value: '91%', color: '#00e676' },
-          { label: '过低 (<37.5)', value: '4%', color: '#448aff' },
-          { label: '过高 (>39.0)', value: '5%', color: '#ff3b5c' },
+          { label: '正常 (37.5-39.0)', value: '0%', color: '#00e676' },
+          { label: '过低 (<37.5)', value: '0%', color: '#448aff' },
+          { label: '过高 (>39.0)', value: '0%', color: '#ff3b5c' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { normal:0, low:0, high:0 };
+          devs.forEach(d => {
+            if (d.temperature > 39) c.high++;
+            else if (d.temperature < 37.5) c.low++;
+            else c.normal++;
+          });
+          const total = devs.length;
           return [
-            { value: 91, name: '正常', itemStyle: { color: '#00e676' } },
-            { value: 4, name: '过低', itemStyle: { color: '#448aff' } },
-            { value: 5, name: '过高', itemStyle: { color: '#ff3b5c' } },
-          ];
+            { value: +(c.normal/total*100).toFixed(1), name:'正常', itemStyle:{color:'#00e676'} },
+            { value: +(c.high/total*100).toFixed(1), name:'过高', itemStyle:{color:'#ff3b5c'} },
+            { value: +(c.low/total*100).toFixed(1), name:'过低', itemStyle:{color:'#448aff'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '正常', data: [90, 88, 93, 92], color: '#00e676' },
-              { name: '过低', data: [4, 6, 3, 4], color: '#448aff' },
-              { name: '过高', data: [6, 6, 4, 4], color: '#ff3b5c' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
-          const t = d.temperature;
-          if (t > 39) return '#ff3b5c';
-          if (t < 37.5) return '#448aff';
+          if (d.temperature > 39) return '#ff3b5c';
+          if (d.temperature < 37.5) return '#448aff';
           return '#00e676';
         },
       },
@@ -757,30 +713,24 @@ const app = createApp({
         id: 'pace',
         title: '宠物步频速度监测',
         timeMode: 'realtime',
-        regionalAlert: '⚠ 江北区西部 8 例步频异常偏高，伴随异常运动模式，可能为焦躁或疼痛表现！',
-        alerts: {
-          realtime: '江北区 8 例步频异常偏高，伴随运动强度警告',
-          '24h': '今日步频峰值集中在早晚遛狗时段 (07:00-09:00, 18:00-20:00)',
-          '7d': '近7日步频异常率 12%，高于月均 8%，户外活动增加为主要原因',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '正常', value: '88%', color: '#00e676' },
-          { label: '异常', value: '12%', color: '#ff3b5c' },
+          { label: '正常', value: '0%', color: '#00e676' },
+          { label: '异常', value: '0%', color: '#ff3b5c' },
         ],
         getPieData() {
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { normal:0, anomaly:0 };
+          devs.forEach(d => { if (d.pace > 80) c.anomaly++; else c.normal++; });
+          const total = devs.length;
           return [
-            { value: 88, name: '正常', itemStyle: { color: '#00e676' } },
-            { value: 12, name: '异常', itemStyle: { color: '#ff3b5c' } },
-          ];
+            { value: +(c.normal/total*100).toFixed(1), name:'正常', itemStyle:{color:'#00e676'} },
+            { value: +(c.anomaly/total*100).toFixed(1), name:'异常', itemStyle:{color:'#ff3b5c'} },
+          ].filter(p => p.value > 0);
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '正常', data: [86, 90, 89, 87], color: '#00e676' },
-              { name: '异常', data: [14, 10, 11, 13], color: '#ff3b5c' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
           return d.pace > 80 ? '#ff3b5c' : '#00e676';
@@ -790,50 +740,35 @@ const app = createApp({
         id: 'anomalyEvent',
         title: '宠物异常事件监控',
         timeMode: 'realtime',
-        regionalAlert: '⚠ 沙坪坝区东部集群异常！4 例心脏异常 + 2 例呼吸异常叠加，疑似区域传染性病原体扩散！',
-        alerts: {
-          realtime: '⚠ 当前检测到 4 例心脏异常、2 例呼吸异常、1 例骨骼异常',
-          '24h': '过去24小时共触发 23 次异常事件预警，其中 16 次为心脏异常',
-          '7d': '近7日异常事件趋势：心脏异常 ↑15%，呼吸异常 ↓8%，骨骼异常 →稳定',
-        },
+        alerts: { realtime: '', '24h': '', '7d': '' },
         stats: [
-          { label: '无异常', value: '82%', color: '#00e676' },
-          { label: '心脏异常', value: '10%', color: '#ff3b5c' },
-          { label: '骨骼异常', value: '3%', color: '#ffffff' },
-          { label: '呼吸异常', value: '5%', color: '#ff9100' },
+          { label: '无异常', value: '0%', color: '#00e676' },
+          { label: '心脏异常', value: '0%', color: '#ff3b5c' },
+          { label: '呼吸异常', value: '0%', color: '#ff9100' },
         ],
         getPieData() {
-          return [
-            { value: 82, name: '无异常', itemStyle: { color: '#00e676' } },
-            { value: 10, name: '心脏异常', itemStyle: { color: '#ff3b5c' } },
-            { value: 3, name: '骨骼异常', itemStyle: { color: '#ffffff' } },
-            { value: 5, name: '呼吸异常', itemStyle: { color: '#ff9100' } },
-          ];
+          const devs = liveDevices.value;
+          if (!devs.length) return [{ value:1, name:'等待数据', itemStyle:{color:'#333'} }];
+          const c = { '无异常':0, '心脏异常':0, '呼吸异常':0, '骨骼异常':0 };
+          devs.forEach(d => { c[d.anomaly] = (c[d.anomaly]||0) + 1; });
+          const total = devs.length;
+          return Object.entries(c).filter(([,v]) => v > 0).map(([k,v]) => ({
+            value: +(v/total*100).toFixed(1), name: k,
+            itemStyle: { color: k === '无异常' ? '#00e676' : k === '心脏异常' ? '#ff3b5c' : k === '呼吸异常' ? '#ff9100' : '#ffffff' },
+          }));
         },
         getBarData() {
-          return {
-            categories: ['渝东', '渝南', '渝西', '渝北'],
-            series: [
-              { name: '心脏异常', data: [4, 3, 5, 3], color: '#ff3b5c' },
-              { name: '骨骼异常', data: [1, 1, 0, 1], color: '#ffffff' },
-              { name: '呼吸异常', data: [2, 1, 1, 2], color: '#ff9100' },
-            ],
-          };
+          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
         },
         getDeviceColor(d) {
-          switch (d.anomaly) {
-            case '心脏异常': return '#ff3b5c';
-            case '骨骼异常': return '#ffffff';
-            case '呼吸异常': return '#ff9100';
-            default: return '#00e676';
-          }
+          return d.anomaly === '心脏异常' ? '#ff3b5c' : d.anomaly === '骨骼异常' ? '#ffffff' : d.anomaly === '呼吸异常' ? '#ff9100' : '#00e676';
         },
       },
     ]);
 
     /* ── Reactive State ── */
     const activePanel = ref([]);
-    const lastActiveIdx = ref(-1); // track most-recently-opened panel for map coloring
+    const lastActiveIdx = ref(-1);
     const mapContainer = ref(null);
     const curtainEl = ref(null);
     const infoboxEl = ref(null);
@@ -845,13 +780,13 @@ const app = createApp({
     let curtainTimer = null;
     let hideInfoboxTimer = null;
 
-    /* ── Map background drag + zoom calibration ── */
+    /* ── Map calibration ── */
     const MAP_STORAGE_KEY = 'petnode_map_calib_v2';
     let saved = { x: 0, y: 0, s: 1 };
     try { const raw = localStorage.getItem(MAP_STORAGE_KEY); if (raw) saved = JSON.parse(raw); } catch (_) {}
     const bgOffset = reactive({ x: saved.x || 0, y: saved.y || 0 });
     const bgScale = ref(saved.s || 1);
-    const mapEditMode = ref(false); // toggle to enable drag/zoom
+    const mapEditMode = ref(false);
     let dragInfo = null;
 
     function applyBgOffset() {
@@ -867,14 +802,12 @@ const app = createApp({
       bgScale.value = 1;
       saveCalibration();
     }
-
     function onMapWheel(e) {
       if (!mapEditMode.value) return;
       const el = mapContainer.value;
       if (!el) return;
       const delta = e.deltaY > 0 ? -0.06 : 0.06;
       const newScale = Math.max(0.15, Math.min(5, bgScale.value + delta));
-      // Zoom toward mouse cursor
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -884,7 +817,6 @@ const app = createApp({
       bgScale.value = newScale;
       saveCalibration();
     }
-
     function onMapMouseDown(e) {
       if (!mapEditMode.value || e.button !== 0) return;
       dragInfo = { sx: e.clientX, sy: e.clientY, ox: bgOffset.x, oy: bgOffset.y, active: false };
@@ -911,18 +843,15 @@ const app = createApp({
       visible: false, left: '0px', top: '0px',
     });
 
-        /* ── Backend connection status ── */
+    /* ── Backend connection status ── */
     const backendConnected = ref(false);
     const backendChecking = ref(true);
-    let liveDeviceCount = ref(0);
+    const liveDeviceCount = ref(0);
 
     const currentTime = ref('');
     const chatInput = ref('');
     const chatList = reactive([
-      { type: 'system', text: '系统初始化完成。PetNode AI 智能分析引擎 v3.2.1 已就绪。当前监测 <em>40</em> 台设备，覆盖重庆市 8 个行政区。' },
-      { type: 'system', text: '本周关键洞察：沙坪坝区域心率异常率较全市均值高 <em>1.8 倍</em>，建议推送给该区域用户关于夏季高温运动强度管理的提醒。' },
-      { type: 'user', text: '帮我分析一下渝中区的宠物健康状况' },
-      { type: 'system', text: '渝中区当前在线 <em>15</em> 台设备。该区域最大问题是<em>运动量不足</em>——日均运动时长仅 38 分钟，低于全市均值 55 分钟；同时静息时间过长，平均每天 16 小时。建议该区域用户增加早晚遛狗频次，利用 PetNode 小程序中的运动计划功能设定每日目标。' },
+      { type: 'system', text: '系统已启动，正在获取实时数据...' },
     ]);
 
     function sendChat() {
@@ -930,19 +859,21 @@ const app = createApp({
       if (!txt) return;
       chatList.push({ type: 'user', text: txt });
       chatInput.value = '';
-
-      // Simulate AI response
-      const responses = [
-        '根据系统分析，当前最值得关注的是<em>心率异常事件</em>。沙坪坝区域在过去 24 小时内报告了 5 例心动过速事件，建议核实相关设备并及时联系饲主。',
-        '数据显示全市宠物整体健康状况<em>良好</em>，覆盖率达到 87.3%。渝北和江北区域的宠物活跃度最高，渝中区偏低。',
-        '近 7 日瘙痒动作频率较上月上升 <em>12.7%</em>，可能与近期气温回升及花粉浓度升高有关。建议关注南岸区与巴南区的高频瘙痒设备。',
-        '系统检测到巴南区有 2 例宠物体温偏高，建议立即排查是否与环境温度有关，并推送防暑降温建议至相关用户。',
-      ];
-      const resp = responses[Math.floor(Math.random() * responses.length)];
+      const devs = liveDevices.value;
+      const anoms = devs.filter(d => d.anomaly !== '无异常');
+      const lines = [];
+      lines.push(`当前共监测 <em>${devs.length}</em> 台设备`);
+      if (devs.length > 0) {
+        const avgHr = (devs.reduce((s,d) => s+d.heartRate, 0) / devs.length).toFixed(0);
+        const avgTmp = (devs.reduce((s,d) => s+d.temperature, 0) / devs.length).toFixed(1);
+        lines.push(`平均心率 <em>${avgHr} bpm</em>，平均体温 <em>${avgTmp}°C</em>`);
+      }
+      if (anoms.length > 0) lines.push(`异常设备 <em>${anoms.length}</em> 台`);
+      else lines.push('当前 <em>无异常</em> 设备');
       setTimeout(() => {
-        chatList.push({ type: 'system', text: resp });
+        chatList.push({ type: 'system', text: lines.join(' · ') });
         nextTick(() => scrollChat());
-      }, 600 + Math.random() * 600);
+      }, 400);
       nextTick(() => scrollChat());
     }
 
@@ -961,20 +892,15 @@ const app = createApp({
     }
     let clockTimer = null;
 
-    /* ── Chart ref helper ── */
+    /* ── Chart helpers ── */
     function setChartRef(idx, el) {
       if (el) chartRefs[idx] = el;
     }
-
-    /* ── Safe ECharts init: always dispose existing instance on DOM first ── */
     function safeInit(dom) {
-      // Kill any instance still bound to this DOM node (prevents overlap/ghost charts)
       const existing = echarts.getInstanceByDom(dom);
       if (existing) existing.dispose();
       return echarts.init(dom);
     }
-
-    /* ── Build ECharts pie ── */
     function buildPie(dom, pieData) {
       const inst = safeInit(dom);
       inst.setOption({
@@ -982,9 +908,7 @@ const app = createApp({
         tooltip: { trigger: 'item', backgroundColor: 'rgba(22,27,34,0.97)', borderColor: '#1a73e840', textStyle: { color: '#e6edf3', fontSize: 12 } },
         legend: { orient: 'vertical', left: 8, top: 'center', textStyle: { color: '#8b949e', fontSize: 11 }, itemWidth: 10, itemHeight: 10, itemGap: 12 },
         series: [{
-          type: 'pie',
-          radius: ['55%', '78%'],
-          center: ['50%', '50%'],
+          type: 'pie', radius: ['55%', '78%'], center: ['50%', '50%'],
           avoidLabelOverlap: false,
           itemStyle: { borderRadius: 2, borderColor: '#ffffff', borderWidth: 2 },
           label: { show: false },
@@ -994,8 +918,6 @@ const app = createApp({
       });
       return inst;
     }
-
-    /* ── Build ECharts stacked bar ── */
     function buildBar(dom, barData, categories) {
       const inst = safeInit(dom);
       inst.setOption({
@@ -1006,68 +928,51 @@ const app = createApp({
         xAxis: { type: 'category', data: categories || ['渝东', '渝南', '渝西', '渝北'], axisLabel: { color: '#5c6878', fontSize: 10 }, axisLine: { lineStyle: { color: '#ffffff10' } } },
         yAxis: { type: 'value', axisLabel: { color: '#5c6878', fontSize: 10 }, splitLine: { lineStyle: { color: '#ffffff08' } } },
         series: (barData || []).map(s => ({
-          name: s.name,
-          type: 'bar',
-          stack: 'total',
+          name: s.name, type: 'bar', stack: 'total',
           emphasis: { focus: 'series' },
-          data: s.data,
-          itemStyle: { color: s.color, borderRadius: 0 },
+          data: s.data, itemStyle: { color: s.color, borderRadius: 0 },
           barWidth: 28,
         })),
       });
       return inst;
     }
 
-    /* ── Compute regional anomaly alerts per dimension ── */
+    /* ── Compute regional anomaly alerts ── */
     const anomalyDesc = {
-      dogSize: '大型犬占比异常',
-      heartRate: '心率异常',
-      status: '运动严重不足',
-      respiration: '呼吸频率异常',
-      temperature: '体温异常',
-      pace: '步频异常',
+      dogSize: '大型犬占比异常', heartRate: '心率异常', status: '运动严重不足',
+      respiration: '呼吸频率异常', temperature: '体温异常', pace: '步频异常',
       anomalyEvent: '异常事件',
     };
     function computeRegionalAlerts(idx) {
       const dim = dimensions[idx];
+      if (dim.id === 'dogSize' || dim.id === 'status' || dim.id === 'pace') {
+        dim.regionalAlerts = [];
+        return;
+      }
       const counts = {};
-      allDevices.forEach(d => {
+      for (const d of liveDevices.value) {
         let isAnomaly = false;
         switch (dim.id) {
-          case 'dogSize': isAnomaly = d.dogSize === '大型犬'; break;
           case 'heartRate': isAnomaly = d.heartRate > 140 || d.heartRate < 60; break;
-          case 'status': return; // no regional alerts for behavior status
           case 'respiration': isAnomaly = d.respRate > 30 || d.respRate < 10; break;
           case 'temperature': isAnomaly = d.temperature > 39 || d.temperature < 37.5; break;
-          case 'pace': isAnomaly = d.pace > 80; break;
           case 'anomalyEvent': isAnomaly = d.anomaly !== '无异常'; break;
         }
         if (isAnomaly) counts[d.district] = (counts[d.district] || 0) + 1;
-      });
-      const alerts = Object.entries(counts)
+      }
+      dim.regionalAlerts = Object.entries(counts)
         .filter(([,c]) => c >= 1)
         .sort(([,a],[,b]) => b - a)
-        .map(([district, count]) => ({
-          district, count,
-          desc: anomalyDesc[dim.id] || '数据异常',
-        }));
-      dim.regionalAlerts = alerts;
+        .map(([district, count]) => ({ district, count, desc: anomalyDesc[dim.id] || '数据异常' }));
     }
 
-    /* ── Render a dimension panel chart ── */
+    /* ── Render dimension panel chart ── */
     function renderPanelChart(idx) {
-      // Wait for Vue DOM flush, then a tick for collapse expand animation
       nextTick(() => {
         setTimeout(() => {
           const dom = chartRefs[idx];
-          if (!dom || dom.offsetParent === null) return; // bail if not visible
-
-          // Dispose tracked instance
-          if (panelCharts[idx]) {
-            panelCharts[idx].dispose();
-            panelCharts[idx] = null;
-          }
-
+          if (!dom || dom.offsetParent === null) return;
+          if (panelCharts[idx]) { panelCharts[idx].dispose(); panelCharts[idx] = null; }
           const dim = dimensions[idx];
           let inst;
           if (dim.timeMode === 'realtime') {
@@ -1077,70 +982,59 @@ const app = createApp({
             inst = buildBar(dom, bd.series, bd.categories);
           }
           panelCharts[idx] = inst;
-          // Resize after collapse expansion animation settles (~350ms total)
           setTimeout(() => { if (inst && !inst.isDisposed()) inst.resize(); }, 120);
         }, 180);
       });
     }
 
-    /* ── Map coordinate bounds (centered on urban core) ── */
+    /* ── Map ── */
     const MAP_BOUNDS = { lngMin: 106.38, lngMax: 106.60, latMin: 29.48, latMax: 29.64 };
 
-    // Core reference point: 朝天门 (Yangtze + Jialing confluence)
-
-    /* ── Map Chart (transparent overlay on CSS background image) ── */
     function buildMapChart() {
       const dom = document.getElementById('map-chart');
       if (!dom || dom.offsetWidth === 0 || dom.offsetHeight === 0) return;
-      if (!mapChart) {
-        mapChart = echarts.init(dom);
-      }
+      if (!mapChart) mapChart = echarts.init(dom);
       renderMap();
     }
 
     function renderMap() {
+      if (!mapChart) return;
       const activeIdx = lastActiveIdx.value;
       const dim = activeIdx >= 0 && activeIdx < dimensions.length ? dimensions[activeIdx] : null;
       const B = MAP_BOUNDS;
+      const devices = liveDevices.value;
 
-      const seriesData = allDevices.map((d, i) => {
+      const seriesData = devices.map((d, i) => {
         const color = dim ? dim.getDeviceColor(d) : '#009a8c';
         return {
           value: [d.lng, d.lat, d.heartRate || 1],
-          name: d.deviceId,
-          deviceIdx: i,
+          name: d.deviceId, deviceIdx: i,
           itemStyle: { color },
         };
       });
 
-      const anomalyData = allDevices
-        .filter((d, i) => {
-          if (dim && dim.id === 'anomalyEvent') return d.anomaly !== '无异常';
-          if (dim && dim.id === 'heartRate') return d.heartRate > 140 || d.heartRate < 60;
-          if (dim && dim.id === 'temperature') return d.temperature > 39 || d.temperature < 37.5;
-          if (dim && dim.id === 'respiration') return d.respRate > 30 || d.respRate < 10;
-          return false;
-        })
-        .map(d => ({
-          value: [d.lng, d.lat],
-          itemStyle: { color: dim ? dim.getDeviceColor(d) : '#ff3b5c' },
-        }));
+      const anomalyData = devices.filter(d => {
+        if (!dim) return false;
+        if (dim.id === 'heartRate') return d.heartRate > 140 || d.heartRate < 60;
+        if (dim.id === 'temperature') return d.temperature > 39 || d.temperature < 37.5;
+        if (dim.id === 'respiration') return d.respRate > 30 || d.respRate < 10;
+        if (dim.id === 'anomalyEvent') return d.anomaly !== '无异常';
+        return false;
+      }).map(d => ({
+        value: [d.lng, d.lat],
+        itemStyle: { color: dim ? dim.getDeviceColor(d) : '#ff3b5c' },
+      }));
 
-      // District-level anomaly aggregation for warning markers
       const districtAnomalies = {};
       anomalyData.forEach(ad => {
-        const d = allDevices.find(dv => dv.lng === ad.value[0] && dv.lat === ad.value[1]);
-        if (d) {
-          districtAnomalies[d.district] = (districtAnomalies[d.district] || 0) + 1;
-        }
+        const d = devices.find(dv => dv.lng === ad.value[0] && dv.lat === ad.value[1]);
+        if (d) districtAnomalies[d.district] = (districtAnomalies[d.district] || 0) + 1;
       });
       const warningDistricts = districts.filter(d => (districtAnomalies[d.name] || 0) >= 2);
       const warningMarkers = warningDistricts.map(d => ({
-        value: [d.lng, d.lat],
-        name: d.name,
+        value: [d.lng, d.lat], name: d.name,
         symbol: 'path://M0,-14 L12,8 L-12,8 Z M-1.5,-5 L1.5,-5 L1,1 L-1,1 Z M0,3.5 L0,6 M-1.2,6 L1.2,6',
-        symbolSize: 28,
-        symbolKeepAspect: true,
+        symbolSize: 28, symbolKeepAspect: true,
         itemStyle: { color: '#ef4444' },
       }));
 
@@ -1149,10 +1043,7 @@ const app = createApp({
         for (let k = 0; k < 8; k++) {
           const angle = Math.random() * Math.PI * 2;
           const dist = 0.003 + Math.random() * 0.012;
-          pts.push({
-            value: [ad.value[0] + Math.cos(angle) * dist, ad.value[1] + Math.sin(angle) * dist],
-            itemStyle: { color: ad.itemStyle.color, opacity: 0.25 },
-          });
+          pts.push({ value: [ad.value[0] + Math.cos(angle) * dist, ad.value[1] + Math.sin(angle) * dist], itemStyle: { color: ad.itemStyle.color, opacity: 0.25 } });
         }
         return pts;
       });
@@ -1160,94 +1051,39 @@ const app = createApp({
       mapChart.setOption({
         backgroundColor: 'transparent',
         grid: { left: 0, right: 0, top: 0, bottom: 0 },
-        xAxis: { type: 'value', min: B.lngMin, max: B.lngMax, show: false, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
-        yAxis: { type: 'value', min: B.latMin, max: B.latMax, show: false, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+        xAxis: { type: 'value', min: B.lngMin, max: B.lngMax, show: false },
+        yAxis: { type: 'value', min: B.latMin, max: B.latMax, show: false },
         series: [
-          // ── Yangtze River (长江) — shorter, urban-core-only path ──
-          {
-            type: 'lines',
-            coordinateSystem: 'cartesian2d',
-            polyline: true,
-            data: [{
-              coords: [
-                [106.45,29.544],[106.47,29.547],
-                [106.485,29.550],[106.495,29.552],[106.502,29.554],[106.51,29.553],
-                [106.52,29.550],
-              ],
-            }],
+          { type: 'lines', coordinateSystem: 'cartesian2d', polyline: true,
+            data: [{ coords: [[106.45,29.544],[106.47,29.547],[106.485,29.550],[106.495,29.552],[106.502,29.554],[106.51,29.553],[106.52,29.550]] }],
             lineStyle: { color: 'rgba(20,160,210,0.70)', width: 5, curveness: 0.2 },
             effect: { show: true, period: 6, trailLength: 0.3, symbol: 'circle', symbolSize: 2.5, color: 'rgba(20,180,230,0.50)' },
-            zlevel: 0, silent: true,
-          },
-          // ── Jialing River (嘉陵江) — shorter path ──
-          {
-            type: 'lines',
-            coordinateSystem: 'cartesian2d',
-            polyline: true,
-            data: [{
-              coords: [
-                [106.475,29.578],[106.48,29.570],
-                [106.485,29.564],[106.49,29.558],[106.495,29.554],[106.50,29.554],
-              ],
-            }],
+            zlevel: 0, silent: true },
+          { type: 'lines', coordinateSystem: 'cartesian2d', polyline: true,
+            data: [{ coords: [[106.475,29.578],[106.48,29.570],[106.485,29.564],[106.49,29.558],[106.495,29.554],[106.50,29.554]] }],
             lineStyle: { color: 'rgba(20,160,210,0.65)', width: 4.5, curveness: 0.15 },
             effect: { show: true, period: 5, trailLength: 0.25, symbol: 'circle', symbolSize: 2.5, color: 'rgba(20,180,230,0.45)' },
-            zlevel: 0, silent: true,
-          },
-          // ── Confluence marker (朝天门 · core reference anchor) ──
-          {
-            type: 'effectScatter',
-            coordinateSystem: 'cartesian2d',
+            zlevel: 0, silent: true },
+          { type: 'effectScatter', coordinateSystem: 'cartesian2d',
             data: [{ value: [106.502, 29.554], itemStyle: { color: '#1a73e8' } }],
             symbol: 'circle', symbolSize: 14,
             rippleEffect: { brushType: 'stroke', scale: 4.5, period: 1.6 },
             label: { show: true, formatter: '朝天门', position: 'right', color: '#1a73e8', fontSize: 11, fontWeight: 'bold', backgroundColor: 'rgba(22,27,34,0.8)', padding: [2,6], borderRadius: 3 },
-            showEffectOn: 'render', zlevel: 1, silent: true,
-          },
-          // Heat fog
-          {
-            type: 'scatter', coordinateSystem: 'cartesian2d',
-            data: heatFog, symbol: 'circle', symbolSize: 16, silent: true, zlevel: 0,
-          },
-          // Red fog blobs behind warning markers
-          {
-            type: 'scatter', coordinateSystem: 'cartesian2d',
-            data: warningDistricts.map(d => ({
-              value: [d.lng, d.lat],
-              itemStyle: { color: 'rgba(239,68,68,0.15)' },
-            })),
-            symbol: 'circle', symbolSize: 60,
-            zlevel: 2, silent: true,
-          },
-          // Warning triangle markers on anomaly hotspots
-          {
-            type: 'scatter', coordinateSystem: 'cartesian2d',
-            data: warningMarkers,
-            symbol: 'path://M0,-16 L13,8 L-13,8 Z',
-            symbolSize: 28,
-            symbolKeepAspect: true,
-            itemStyle: { color: '#ef4444' },
-            label: {
-              show: true,
-              formatter: '!',
-              color: '#fbbf24',
-              fontSize: 18,
-              fontWeight: 'bold',
-              position: 'inside',
-            },
-            zlevel: 3, silent: true,
-          },
-          // Effect scatter anomaly glow (silent so clicks pass through to main scatter)
-          {
-            type: 'effectScatter', coordinateSystem: 'cartesian2d',
+            showEffectOn: 'render', zlevel: 1, silent: true },
+          { type: 'scatter', coordinateSystem: 'cartesian2d', data: heatFog, symbol: 'circle', symbolSize: 16, silent: true, zlevel: 0 },
+          { type: 'scatter', coordinateSystem: 'cartesian2d',
+            data: warningDistricts.map(d => ({ value: [d.lng, d.lat], itemStyle: { color: 'rgba(239,68,68,0.15)' } })),
+            symbol: 'circle', symbolSize: 60, zlevel: 2, silent: true },
+          { type: 'scatter', coordinateSystem: 'cartesian2d',
+            data: warningMarkers, symbol: 'path://M0,-16 L13,8 L-13,8 Z',
+            symbolSize: 28, symbolKeepAspect: true, itemStyle: { color: '#ef4444' },
+            label: { show: true, formatter: '!', color: '#fbbf24', fontSize: 18, fontWeight: 'bold', position: 'inside' },
+            zlevel: 3, silent: true },
+          { type: 'effectScatter', coordinateSystem: 'cartesian2d',
             data: anomalyData, symbol: 'circle', symbolSize: 14,
             rippleEffect: { brushType: 'stroke', scale: 3.2, period: 2.8 },
-            showEffectOn: 'render', zlevel: 0, silent: true,
-          },
-          // Main device scatter
-          {
-            type: 'scatter', coordinateSystem: 'cartesian2d',
-            data: seriesData, symbol: 'circle',
+            showEffectOn: 'render', zlevel: 0, silent: true },
+          { type: 'scatter', coordinateSystem: 'cartesian2d', data: seriesData, symbol: 'circle',
             symbolSize: (val) => Math.max(8, Math.min(18, val[2] / 8)),
             label: { show: false },
             emphasis: {
@@ -1255,41 +1091,19 @@ const app = createApp({
               label: {
                 show: true,
                 formatter: (p) => {
-                  const d = allDevices[p.data.deviceIdx];
+                  const d = devices[p.data.deviceIdx];
                   if (!d) return p.name;
                   if (!dim) return '{name|' + d.deviceId + '}';
                   let val, tag;
                   switch (dim.id) {
-                    case 'heartRate':
-                      val = d.heartRate + ' bpm';
-                      tag = d.heartRate > 140 ? 'danger' : d.heartRate < 60 ? 'warn' : 'ok';
-                      break;
-                    case 'dogSize':
-                      val = d.dogSize;
-                      tag = d.dogSize === '大型犬' ? 'danger' : d.dogSize === '中型犬' ? 'low' : 'ok';
-                      break;
-                    case 'status':
-                      val = d.status;
-                      tag = d.status === '运动' ? 'danger' : d.status === '静息' ? 'ok' : 'low';
-                      break;
-                    case 'respiration':
-                      val = d.respRate + ' 次/分';
-                      tag = d.respRate > 30 ? 'danger' : d.respRate < 10 ? 'warn' : 'ok';
-                      break;
-                    case 'temperature':
-                      val = d.temperature.toFixed(1) + '°C';
-                      tag = d.temperature > 39 ? 'danger' : d.temperature < 37.5 ? 'low' : 'ok';
-                      break;
-                    case 'pace':
-                      val = d.pace + ' 步/分';
-                      tag = d.pace > 80 ? 'danger' : 'ok';
-                      break;
-                    case 'anomalyEvent':
-                      val = d.anomaly;
-                      tag = d.anomaly === '心脏异常' ? 'danger' : d.anomaly === '骨骼异常' ? 'gray' : d.anomaly === '呼吸异常' ? 'warn' : 'ok';
-                      break;
-                    default:
-                      val = ''; tag = 'name';
+                    case 'heartRate': val = d.heartRate + ' bpm'; tag = d.heartRate > 140 ? 'danger' : d.heartRate < 60 ? 'warn' : 'ok'; break;
+                    case 'dogSize': val = d.dogSize; tag = d.dogSize === '大型犬' ? 'danger' : d.dogSize === '中型犬' ? 'low' : 'ok'; break;
+                    case 'status': val = d.status; tag = d.status === '运动' ? 'danger' : d.status === '静息' ? 'ok' : 'low'; break;
+                    case 'respiration': val = d.respRate + ' 次/分'; tag = d.respRate > 30 ? 'danger' : d.respRate < 10 ? 'warn' : 'ok'; break;
+                    case 'temperature': val = d.temperature.toFixed(1) + '°C'; tag = d.temperature > 39 ? 'danger' : d.temperature < 37.5 ? 'low' : 'ok'; break;
+                    case 'pace': val = d.pace + ' 步/分'; tag = d.pace > 80 ? 'danger' : 'ok'; break;
+                    case 'anomalyEvent': val = d.anomaly; tag = d.anomaly === '心脏异常' ? 'danger' : d.anomaly === '骨骼异常' ? 'gray' : d.anomaly === '呼吸异常' ? 'warn' : 'ok'; break;
+                    default: val = ''; tag = 'name';
                   }
                   return '{name|' + d.deviceId + '}  {dot|·}  {' + tag + '|' + val + '}';
                 },
@@ -1302,8 +1116,7 @@ const app = createApp({
                   low: { color: '#60a5fa', fontSize: 11, fontWeight: 'bold' },
                   gray: { color: '#9ca3af', fontSize: 11, fontWeight: 'bold' },
                 },
-                position: 'top',
-                backgroundColor: 'rgba(22,27,34,0.94)',
+                position: 'top', backgroundColor: 'rgba(22,27,34,0.94)',
                 padding: [4, 10], borderRadius: 4,
               },
             },
@@ -1312,11 +1125,10 @@ const app = createApp({
         ],
       }, true);
 
-      // ── InfoBox ──
       const actDim = lastActiveIdx.value >= 0 ? dimensions[lastActiveIdx.value] : null;
 
       function buildInfoRows(d) {
-        const rows = [
+        return [
           { label: '犬型',     value: d.dogSize,           color: d.dogSize === '大型犬' ? '#ff3b5c' : d.dogSize === '中型犬' ? '#448aff' : '#00e676' },
           { label: '心率',     value: d.heartRate + ' bpm', color: d.heartRate > 140 ? '#ff3b5c' : d.heartRate < 60 ? '#ff9100' : '#00e676' },
           { label: '行为状态', value: d.status,             color: d.status === '运动' ? '#ff3b5c' : d.status === '静息' ? '#00e676' : '#448aff' },
@@ -1325,14 +1137,12 @@ const app = createApp({
           { label: '步频',     value: d.pace + ' 步/分',    color: d.pace > 80 ? '#ff3b5c' : '#00e676' },
           { label: '异常事件', value: d.anomaly,             color: d.anomaly === '心脏异常' ? '#d63031' : d.anomaly === '骨骼异常' ? '#636e72' : d.anomaly === '呼吸异常' ? '#e17055' : '#00b894' },
         ];
-        if (actDim) rows.forEach((r, i) => { r.active = dimensions[i].id === actDim.id; });
-        return rows;
       }
 
       mapChart.off('click');
       mapChart.on('click', (params) => {
         if (params.componentType === 'series' && params.seriesIndex === 7 && params.data.deviceIdx !== undefined) {
-          const d = allDevices[params.data.deviceIdx];
+          const d = devices[params.data.deviceIdx];
           infobox.deviceId = d.deviceId;
           infobox.dimName = actDim ? actDim.title : '';
           infobox.rows = buildInfoRows(d);
@@ -1362,23 +1172,19 @@ const app = createApp({
       }, 750);
     }
 
-    /* ── Panel change → update map + charts ── */
+    /* ── Panel change ── */
     function onPanelChange(activeNames) {
       if (activeNames.length > 0) {
         lastActiveIdx.value = activeNames[activeNames.length - 1];
       } else {
-        // All panels closed → reset to default map
         lastActiveIdx.value = -1;
       }
-
       if (panelStatus.value && activeNames.length > 0) {
         const last = lastActiveIdx.value;
         panelStatus.value.textContent = '已展开 ' + activeNames.length + ' 个面板 · 当前: ' + dimensions[last].title;
       } else if (panelStatus.value) {
         panelStatus.value.textContent = '系统就绪';
       }
-
-      // Always trigger curtain animation (open or close), so closing also has the transition
       triggerCurtain(() => renderMap());
     }
 
@@ -1386,14 +1192,9 @@ const app = createApp({
       renderPanelChart(idx);
     }
 
-    /* ── Watch active panels for chart render / disposal ── */
     watch(activePanel, (newArr, oldArr) => {
-      // Dispose charts for panels that were closed
       const closed = (oldArr || []).filter(n => !(newArr || []).includes(n));
-      closed.forEach(n => {
-        if (panelCharts[n]) { panelCharts[n].dispose(); panelCharts[n] = null; }
-      });
-      // Render charts for panels that were opened
+      closed.forEach(n => { if (panelCharts[n]) { panelCharts[n].dispose(); panelCharts[n] = null; } });
       const opened = (newArr || []).filter(n => !(oldArr || []).includes(n));
       opened.forEach(n => {
         computeRegionalAlerts(n);
@@ -1401,48 +1202,243 @@ const app = createApp({
       });
     }, { deep: false });
 
-/* ── Exit ── */
     function exitDashboard() {
       if (confirm('确定退出管理大屏，返回 PetNode 官网？')) {
         window.location.href = 'index.html';
       }
     }
 
-    /* ── Lifecycle ── */
-    async function tryConnectBackend() {
-      try {
-        const h = await PetNodeAPI.health();
-        backendConnected.value = h.status === 'healthy';
-        console.log('[PetNode] 后端连接成功:', h);
-        // 尝试获取实时设备数
-        try {
-          const records = await PetNodeAPI.queryRecords({ limit: 1 });
-          if (records && records.count !== undefined) {
-            liveDeviceCount.value = records.count;
-          }
-        } catch (_) {}
-      } catch (err) {
-        console.warn('[PetNode] 后端连接失败，使用模拟数据:', err.message);
-        backendConnected.value = false;
-      } finally {
-        backendChecking.value = false;
+    /* ── API: Refresh all data from backend ── */
+    async function refreshAll() {
+      const hr = apiUrl('/../health');
+      const healthData = await fetchJSON(hr);
+      if (healthData) {
+        backendConnected.value = healthData.status === 'healthy' || healthData.status === 'ok';
       }
+
+      const [profileRes, recordsRes, anomaliesRes] = await Promise.all([
+        fetchJSON(apiUrl('/../profile')),
+        fetchJSON(apiUrl('/../records?source=mongo&limit=200')),
+        fetchJSON(apiUrl('/../records?source=mysql&kind=anomalies&limit=100')),
+      ]);
+
+      // Build telemetry map (device_id → records)
+      const telemetryMap = {};
+      if (recordsRes && recordsRes.status === 'ok') {
+        const records = recordsRes.data || [];
+        for (const rec of records) {
+          const did = rec.device_id;
+          if (!did) continue;
+          if (!telemetryMap[did]) telemetryMap[did] = [];
+          telemetryMap[did].push(rec);
+        }
+      }
+
+      // Build device records from profile + telemetry
+      const devices = [];
+      const profileDevices = (profileRes?.data?.devices) || [];
+
+      if (profileDevices.length > 0) {
+        for (const pd of profileDevices) {
+          const deviceSn = pd.device_sn;
+          const latest = (telemetryMap[deviceSn] || []).slice(-1)[0] || {};
+          const lat = latest.gps_lat || (29.55 + Math.random() * 0.1);
+          const lng = latest.gps_lng || (106.45 + Math.random() * 0.08);
+          devices.push({
+            deviceId: deviceSn,
+            district: assignDistrict(lat, lng),
+            dogSize: '中型犬',
+            heartRate: latest.heart_rate || 80,
+            status: behaviorToStatus(latest.behavior),
+            respRate: latest.resp_rate || 20,
+            temperature: latest.temperature || 38.2,
+            pace: latest.steps ? (Math.round(latest.steps / 10) % 100) : 10,
+            anomaly: '无异常',
+            lng, lat,
+          });
+        }
+      } else {
+        // Fallback: build from telemetry records directly
+        const seen = new Set();
+        for (const [did, recs] of Object.entries(telemetryMap)) {
+          if (seen.has(did)) continue;
+          seen.add(did);
+          const latest = recs.slice(-1)[0];
+          const lat = latest.gps_lat || (29.55 + Math.random() * 0.1);
+          const lng = latest.gps_lng || (106.45 + Math.random() * 0.08);
+          devices.push({
+            deviceId: did,
+            district: assignDistrict(lat, lng),
+            dogSize: '中型犬',
+            heartRate: latest.heart_rate || 80,
+            status: behaviorToStatus(latest.behavior),
+            respRate: latest.resp_rate || 20,
+            temperature: latest.temperature || 38.2,
+            pace: latest.steps ? (Math.round(latest.steps / 10) % 100) : 10,
+            anomaly: '无异常',
+            lng, lat,
+          });
+        }
+      }
+
+      // Process anomalies from MySQL
+      const anomData = (anomaliesRes && anomaliesRes.status === 'ok') ? (anomaliesRes.data || []) : [];
+      // Build a map of MySQL device_id → device_sn from profile
+      const mysqlDeviceMap = {};
+      if (profileRes?.data?.devices) {
+        for (const pd of profileRes.data.devices) {
+          mysqlDeviceMap[String(pd.device_id)] = pd.device_sn;
+        }
+      }
+      for (const a of anomData) {
+        // anomaly_record's device_id is the MySQL internal ID (bigint)
+        const mysqlDid = String(a.device_id || '');
+        const deviceSn = mysqlDeviceMap[mysqlDid] || mysqlDid;
+        const dev = devices.find(d => d.deviceId === deviceSn);
+        if (!dev) continue;
+        if (a.anomaly_code === 'threshold_breach') {
+          try {
+            const detail = typeof a.anomaly_detail === 'string'
+              ? JSON.parse(a.anomaly_detail) : a.anomaly_detail;
+            const trait = (detail && (detail.trait || '')).toLowerCase();
+            if (trait.includes('heart') || trait.includes('心率')) dev.anomaly = '心脏异常';
+            else if (trait.includes('resp') || trait.includes('呼吸')) dev.anomaly = '呼吸异常';
+            else if (trait.includes('temp') || trait.includes('体温')) dev.anomaly = '呼吸异常';
+            else dev.anomaly = '心脏异常';
+          } catch(_) {
+            dev.anomaly = '心脏异常';
+          }
+        }
+      }
+
+      liveDevices.value = devices;
+      liveAnomalies.value = anomData;
+      liveDeviceCount.value = devices.length;
+      backendChecking.value = false;
+
+      // Update district counts
+      const counts = {};
+      for (const d of devices) counts[d.district] = (counts[d.district] || 0) + 1;
+      for (const dist of districts) dist.devices = counts[dist.name] || 0;
+
+      // Recompute panel stats directly from device data
+      for (const dim of dimensions) {
+        const devs = devices;
+        if (!devs.length) { dim.alerts.realtime = ''; continue; }
+        const total = devs.length;
+        switch (dim.id) {
+          case 'dogSize': {
+            const c = { '大型犬':0, '中型犬':0, '小型犬':0 };
+            devs.forEach(d => c[d.dogSize]++);
+            dim.stats[0].value = (c['大型犬']/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c['中型犬']/total*100).toFixed(1)+'%';
+            dim.stats[2].value = (c['小型犬']/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = `共 ${total} 台设备`;
+            break;
+          }
+          case 'heartRate': {
+            const c = { normal:0, fast:0, slow:0 };
+            devs.forEach(d => { if (d.heartRate>140) c.fast++; else if (d.heartRate<60) c.slow++; else c.normal++; });
+            dim.stats[0].value = (c.normal/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c.fast/total*100).toFixed(1)+'%';
+            dim.stats[2].value = (c.slow/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = c.fast || c.slow ? `心率异常 ${(c.fast+c.slow)} 台` : `共 ${total} 台，心率正常`;
+            break;
+          }
+          case 'status': {
+            const c = { '运动':0, '静息':0, '睡眠':0 };
+            devs.forEach(d => c[d.status]++);
+            dim.stats[0].value = (c['运动']/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c['静息']/total*100).toFixed(1)+'%';
+            dim.stats[2].value = (c['睡眠']/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = `运动 ${c['运动']} · 静息 ${c['静息']} · 睡眠 ${c['睡眠']}`;
+            break;
+          }
+          case 'respiration': {
+            const c = { normal:0, slow:0, fast:0 };
+            devs.forEach(d => { if (d.respRate>30) c.fast++; else if (d.respRate<10) c.slow++; else c.normal++; });
+            dim.stats[0].value = (c.normal/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c.slow/total*100).toFixed(1)+'%';
+            dim.stats[2].value = (c.fast/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = c.fast || c.slow ? `呼吸异常 ${(c.fast+c.slow)} 台` : `共 ${total} 台，呼吸正常`;
+            break;
+          }
+          case 'temperature': {
+            const c = { normal:0, low:0, high:0 };
+            devs.forEach(d => { if (d.temperature>39) c.high++; else if (d.temperature<37.5) c.low++; else c.normal++; });
+            dim.stats[0].value = (c.normal/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c.low/total*100).toFixed(1)+'%';
+            dim.stats[2].value = (c.high/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = c.high || c.low ? `体温异常 ${(c.high+c.low)} 台` : `共 ${total} 台，体温正常`;
+            break;
+          }
+          case 'pace': {
+            const c = { normal:0, anomaly:0 };
+            devs.forEach(d => { if (d.pace>80) c.anomaly++; else c.normal++; });
+            dim.stats[0].value = (c.normal/total*100).toFixed(1)+'%';
+            dim.stats[1].value = (c.anomaly/total*100).toFixed(1)+'%';
+            dim.alerts.realtime = c.anomaly ? `步频异常 ${c.anomaly} 台` : `共 ${total} 台，步频正常`;
+            break;
+          }
+          case 'anomalyEvent': {
+            const c = { '无异常':0, '心脏异常':0, '呼吸异常':0, '骨骼异常':0 };
+            devs.forEach(d => { c[d.anomaly]++; });
+            const totalAnom = total - c['无异常'];
+            dim.stats[0].value = (c['无异常']/total*100).toFixed(1)+'%';
+            const anomalyEntries = Object.entries(c).filter(([k,v]) => k !== '无异常' && v > 0);
+            // Update only stats with existing labels
+            anomalyEntries.forEach(([k,v]) => {
+              const s = dim.stats.find(ss => ss.label === k);
+              if (s) s.value = (v/total*100).toFixed(1)+'%';
+            });
+            dim.alerts.realtime = totalAnom > 0 ? `检测到 ${totalAnom} 台异常` : `共 ${total} 台，无异常`;
+            break;
+          }
+        }
+      }
+
+      // Recompute regional alerts for open panels
+      for (const idx of activePanel.value) {
+        computeRegionalAlerts(idx);
+      }
+
+      // Update map & charts
+      renderMap();
+      for (const idx of activePanel.value) {
+        renderPanelChart(idx);
+      }
+
+      // Update chat greeting
+      if (chatList.length === 1 && chatList[0].text === '系统已启动，正在获取实时数据...') {
+        chatList[0] = {
+          type: 'system',
+          text: `系统已连接 · 当前监测 <em>${devices.length}</em> 台设备` +
+            (devices.length > 0
+              ? `，平均心率 <em>${(devices.reduce((s,d) => s+d.heartRate,0)/devices.length).toFixed(0)} bpm</em>`
+              : '')
+        };
+      }
+
+      console.log(`[PetNode] 数据刷新: ${devices.length} 设备, ${anomData.length} 异常`);
     }
 
-    onMounted(() => {
+    /* ── Lifecycle ── */
+    onMounted(async () => {
       updateClock();
       clockTimer = setInterval(updateClock, 1000);
       applyBgOffset();
       nextTick(() => buildMapChart());
-      // 尝试连接后端
-      tryConnectBackend();
 
-      // Handle resize
+      // Initial data fetch
+      await refreshAll();
+
+      // Poll every 10 seconds
+      refreshTimer = setInterval(refreshAll, 10000);
+
       window.addEventListener('resize', () => {
         mapChart?.resize();
         Object.values(panelCharts).forEach(c => c?.resize?.());
       });
-      // Map drag + zoom
       const mc = mapContainer.value;
       if (mc) {
         mc.addEventListener('mousedown', onMapMouseDown);
@@ -1453,6 +1449,7 @@ const app = createApp({
 
     onUnmounted(() => {
       clearInterval(clockTimer);
+      clearInterval(refreshTimer);
       clearTimeout(curtainTimer);
       clearTimeout(hideInfoboxTimer);
       mapChart?.dispose();
