@@ -3,7 +3,7 @@
  * 统一管理后端 API 调用，包括 Token 存储、请求封装、错误处理。
  */
 const Api = (() => {
-  const BASE_URL = 'http://127.0.0.1:5000';
+  const BASE_URL = 'https://pppetnode.com';
   const TOKEN_KEY = 'petnode_admin_token';
 
   function getToken() {
