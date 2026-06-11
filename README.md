@@ -193,8 +193,8 @@ PetNode/
   │  STEP 4a：MongoDB 写入     │        │  STEP 4b：MySQL 写入               │
   │                           │        │                                   │
   │  mongo_storage.save()     │        │  mysql_storage.save()             │
-  │  → 集合 received_records  │        │  ① _resolve_user_id               │
-  │  → 保存全量 JSON 文档      │        │     (upsert user 表)              │
+  │  → 集合 received_records  │        │  ① _resolve_user_id_from_record   │
+  │  → 保存全量 JSON 文档      │        │     (历史兼容: 缺省时回退默认用户) │
   │  → 按设备/时间建索引        │        │  ② _ensure_device                 │
   │                           │        │     (upsert device 表)            │
   │  （vx API 实时遥测查询数据源）│        │  ③ 写 telemetry_record           │
@@ -493,11 +493,11 @@ Content-Type: application/json
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `MySQLStorage.save(record)` | `record: dict` | 将扁平 JSON 拆分写入规范化表（user/device/telemetry/event） |
+| `MySQLStorage.save(record)` | `record: dict` | 将扁平 JSON 拆分写入规范化表（user/device/telemetry/event；Engine record 不含 `user_id`，历史数据兼容另行处理） |
 | `MySQLStorage.query_anomalies(...)` | `user_key, device_key, start_time, end_time, limit, offset` | 查询异常记录列表 |
 | `MySQLStorage.query_profile(...)` | `user_key, device_key` | 查询静态档案（user/device/trait_type/event_type） |
-| `MySQLStorage._resolve_user_id_from_record(record, now)` | 内部方法 | 从每条 JSON 解析 user_id，确保 user 表存在对应行 |
-| `MySQLStorage._ensure_device(device_sn, now, user_id)` | 内部方法 | 设备 upsert（device_sn → device_id BIGINT 稳定映射） |
+| `MySQLStorage._resolve_user_id_from_record(record, now)` | 内部方法 | 历史兼容入口：仅对旧数据或补录记录做 `user_id` 回填；Engine 新上报 record 不需要 `user_id` |
+| `MySQLStorage._ensure_device(device_sn, now, user_id)` | 内部方法 | 设备 upsert（device_sn → device_id BIGINT 稳定映射；`user_id` 仅用于 Flask 绑定/归属域，不属于 Engine 载荷） |
 | `MongoStorage.save(record)` | `record: dict` | 写入 `received_records` 集合 |
 | `MongoStorage.query_records(...)` | `user_id, device_id, start_time, end_time, limit, offset` | 按条件查询遥测记录 |
 
@@ -515,9 +515,11 @@ user                        设备档案用户（引擎默认用户 ID=1）
 
 device                      物理设备（device_sn = 引擎上报的 device_id 字符串）
   device_id BIGINT PK        （由 SHA-256(device_sn) 稳定生成）
-  user_id BIGINT             绑定的用户
+  user_id BIGINT             绑定的用户（兼容/归属字段；Engine record 不携带）
   device_sn VARCHAR(50)      唯一索引
   device_name / pet_name / is_online / activate_time
+
+说明：Engine 上报的 record 只包含设备遥测字段，不携带 `user_id`；MySQL 层仅对历史数据或补录场景做兼容处理，真正的绑定关系由 `user_pets` / `wechat_bindings` 维护。
 
 trait_type                  指标类型字典（自动预填）
   trait_type_id 1=heart_rate, 2=resp_rate, 3=temperature, 4=steps

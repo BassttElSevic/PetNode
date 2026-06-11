@@ -147,11 +147,15 @@ class SmartCollar:
         start_time: Optional[datetime] = None,
         tick_interval: timedelta = timedelta(minutes=1),
         seed: Optional[int] = None,
+        device_id: Optional[str] = None,
     ) -> None:
         # 初始化 NumPy 随机数生成器（可通过 seed 控制可复现性）
         self._rng = np.random.default_rng(seed)
         # 如果未传入 profile，则使用 RNG 随机生成一个（确保同 seed 可复现）
         self.profile = profile or DogProfile.random_profile(rng=self._rng)
+        # 如果指定了固定 device_id，覆盖随机生成的值
+        if device_id:
+            self.profile.dog_id = device_id
         self.tick_interval = tick_interval
 
         # 时钟：模拟时间从 start_time 开始，每次 generate_one_record() 前进 tick_interval
