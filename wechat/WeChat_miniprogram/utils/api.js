@@ -1,6 +1,21 @@
-const BASE_URL = 'http://8.156.95.140:5000/api/v1';
+const BASE_URL = 'http://127.0.0.1:5000';
 
-const BASE_URL = resolveBaseUrl();
+let _redirectingToLogin = false;
+
+function handleAuthExpired() {
+  wx.removeStorageSync('access_token');
+  if (_redirectingToLogin) return; // 防止同时弹出多个 toast
+  _redirectingToLogin = true;
+  wx.showToast({ title: '登录已过期，请重新登录', icon: 'none', duration: 1500 });
+  setTimeout(() => {
+    _redirectingToLogin = false;
+    const pages = getCurrentPages();
+    const route = pages.length > 0 ? pages[pages.length - 1].route : '';
+    if (route !== 'pages/login/login') {
+      wx.reLaunch({ url: '/pages/login/login' });
+    }
+  }, 1500);
+}
 
 /**
  * 核心请求函数
@@ -36,9 +51,8 @@ const request = (url, method = 'GET', data = {}) => {
           // 成功 → 解包返回 data 字段
           resolve(envelope.data);
         } else if (statusCode === 401 || envelope.code === 40101) {
-          // access_token 过期 / 无效
-          wx.removeStorageSync('access_token');
-          wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
+          // access_token 过期/无效 → 清除 token，跳转登录页
+          handleAuthExpired();
           reject(envelope);
         } else if (statusCode === 404) {
           // 404 是可预期的（如未加入家庭），静默失败

@@ -1,7 +1,7 @@
 # PetNode 部署说明（中文）
 
 ## 固定部署信息
-- 服务器 IP：`8.156.95.140`
+- 服务器 IP：`47.108.239.80`
 - 域名：`pppetnode.com`
 
 ## 1) Docker Compose 启动（在 `C_end_Simulator` 下）
