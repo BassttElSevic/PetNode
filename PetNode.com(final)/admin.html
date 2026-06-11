@@ -416,7 +416,7 @@
 
             <!-- Time mode switch -->
             <div class="panel-radio-group">
-              <el-radio-group v-model="dim.timeMode" size="small" @change="onTimeModeChange(idx)">
+              <el-radio-group v-model="dim.timeMode" size="small" @change="onHistoricalModeChange(idx)">
                 <el-radio-button label="realtime">实时模式</el-radio-button>
                 <el-radio-button label="24h">过去24小时</el-radio-button>
                 <el-radio-button label="7d">过去7天</el-radio-button>
@@ -543,6 +543,47 @@ const app = createApp({
     const liveDevices = ref([]);
     const liveAnomalies = ref([]);
     let refreshTimer = null;
+    const historicalCache = reactive({ '24h': null, '7d': null });
+    const historicalLoading = ref(false);
+
+    function getRegion(district) {
+      const map = {
+        '渝北区': '渝北', '江北区': '渝北',
+        '渝中区': '渝西', '沙坪坝区': '渝西',
+        '九龙坡区': '渝南', '大渡口区': '渝南',
+        '南岸区': '渝东', '巴南区': '渝东',
+      };
+      return map[district] || '渝中';
+    }
+
+    async function fetchHistoricalData(timeMode) {
+      if (historicalCache[timeMode]) return historicalCache[timeMode];
+      historicalLoading.value = true;
+      try {
+        const now = new Date();
+        let start;
+        if (timeMode === '24h') {
+          start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        } else {
+          start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+        const startStr = start.toISOString();
+        const endStr = now.toISOString();
+        const url = apiUrl(`/../records?source=mongo&start_time=${encodeURIComponent(startStr)}&end_time=${encodeURIComponent(endStr)}&limit=2000`);
+        const res = await fetchJSON(url);
+        if (res && res.status === 'ok') {
+          historicalCache[timeMode] = res.data || [];
+        } else {
+          historicalCache[timeMode] = [];
+        }
+      } catch (e) {
+        console.warn('[PetNode] Failed to fetch historical data:', e);
+        historicalCache[timeMode] = [];
+      } finally {
+        historicalLoading.value = false;
+      }
+      return historicalCache[timeMode];
+    }
 
     /* ── 7 Dimensions ── */
     const dimensions = reactive([
@@ -569,7 +610,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['dogSize'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           return d.dogSize === '大型犬' ? '#ff3b5c' : d.dogSize === '中型犬' ? '#448aff' : '#00e676';
@@ -602,7 +643,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['heartRate'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           if (d.heartRate > 140) return '#ff3b5c';
@@ -633,7 +674,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['status'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           return d.status === '运动' ? '#ff3b5c' : d.status === '静息' ? '#00e676' : '#448aff';
@@ -666,7 +707,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['respiration'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           if (d.respRate > 30) return '#ff3b5c';
@@ -701,7 +742,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['temperature'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           if (d.temperature > 39) return '#ff3b5c';
@@ -730,7 +771,7 @@ const app = createApp({
           ].filter(p => p.value > 0);
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['pace'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           return d.pace > 80 ? '#ff3b5c' : '#00e676';
@@ -758,7 +799,7 @@ const app = createApp({
           }));
         },
         getBarData() {
-          return { categories: ['渝东','渝南','渝西','渝北'], series: [] };
+          return barDataStore['anomalyEvent'] || { categories: ['渝北','渝西','渝南','渝东'], series: [] };
         },
         getDeviceColor(d) {
           return d.anomaly === '心脏异常' ? '#ff3b5c' : d.anomaly === '骨骼异常' ? '#ffffff' : d.anomaly === '呼吸异常' ? '#ff9100' : '#00e676';
@@ -966,6 +1007,310 @@ const app = createApp({
         .map(([district, count]) => ({ district, count, desc: anomalyDesc[dim.id] || '数据异常' }));
     }
 
+    const barDataStore = reactive({});
+
+    function computeHistoricalBarData(idx, records) {
+      const dim = dimensions[idx];
+      const regions = ['渝北', '渝西', '渝南', '渝东'];
+      if (!records || records.length === 0) {
+        barDataStore[dim.id] = { categories: regions, series: [{ name: '暂无数据', data: [0,0,0,0], color: '#444' }] };
+        return;
+      }
+
+      // Assign each record to a region (cache by device_id)
+      const deviceRegionMap = {};
+      const byRegion = { '渝北': [], '渝西': [], '渝南': [], '渝东': [] };
+      for (const r of records) {
+        const did = r.device_id || 'unknown';
+        if (!deviceRegionMap[did]) {
+          const lat = r.gps_lat;
+          const lng = r.gps_lng;
+          if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
+            deviceRegionMap[did] = getRegion(assignDistrict(lat, lng));
+          } else {
+            // fallback: hash device_id to a region
+            const h = did.split('').reduce((s, c) => s + c.charCodeAt(0), 0) % 4;
+            deviceRegionMap[did] = regions[h];
+          }
+        }
+        byRegion[deviceRegionMap[did]].push(r);
+      }
+
+      let series = [];
+      switch (dim.id) {
+        case 'dogSize': {
+          const dogSizeByDevice = {};
+          liveDevices.value.forEach(d => { dogSizeByDevice[d.deviceId] = d.dogSize; });
+          const sizes = ['大型犬', '中型犬', '小型犬'];
+          const colors = ['#ff3b5c', '#448aff', '#00e676'];
+          sizes.forEach((size, si) => {
+            series.push({
+              name: size,
+              data: regions.map(reg => {
+                const uniqueDevs = new Set((byRegion[reg] || []).map(r => r.device_id));
+                let count = 0;
+                uniqueDevs.forEach(did => { if ((dogSizeByDevice[did] || '中型犬') === size) count++; });
+                return count || 0;
+              }),
+              color: colors[si],
+            });
+          });
+          break;
+        }
+        case 'heartRate': {
+          const groups = [
+            { name: '正常 (60-140)', color: '#00e676', test: hr => hr >= 60 && hr <= 140 },
+            { name: '心动过速 (>140)', color: '#ff9100', test: hr => hr > 140 },
+            { name: '心率偏低 (<60)', color: '#ffc400', test: hr => hr < 60 },
+          ];
+          groups.forEach(g => {
+            series.push({
+              name: g.name,
+              data: regions.map(reg => {
+                const regRecs = byRegion[reg] || [];
+                const cnt = regRecs.filter(r => g.test(r.heart_rate || 80)).length;
+                const total = regRecs.length || 1;
+                return +(cnt / total * 100).toFixed(1);
+              }),
+              color: g.color,
+            });
+          });
+          break;
+        }
+        case 'status': {
+          const behaviors = [
+            { name: '运动', key: 'walking_running', color: '#ff3b5c' },
+            { name: '静息', key: 'resting', color: '#00e676' },
+            { name: '睡眠', key: 'sleeping', color: '#448aff' },
+          ];
+          behaviors.forEach(b => {
+            series.push({
+              name: b.name,
+              data: regions.map(reg => {
+                const regRecs = byRegion[reg] || [];
+                const cnt = regRecs.filter(r => {
+                  const bh = r.behavior || 'resting';
+                  if (b.key === 'walking_running') return bh === 'walking' || bh === 'running';
+                  return bh === b.key;
+                }).length;
+                const total = regRecs.length || 1;
+                return +(cnt / total * 100).toFixed(1);
+              }),
+              color: b.color,
+            });
+          });
+          break;
+        }
+        case 'respiration': {
+          const groups = [
+            { name: '正常 (10-30)', color: '#00e676', test: rr => rr >= 10 && rr <= 30 },
+            { name: '过慢 (<10)', color: '#ff9100', test: rr => rr < 10 },
+            { name: '过快 (>30)', color: '#ff3b5c', test: rr => rr > 30 },
+          ];
+          groups.forEach(g => {
+            series.push({
+              name: g.name,
+              data: regions.map(reg => {
+                const regRecs = byRegion[reg] || [];
+                const cnt = regRecs.filter(r => g.test(r.resp_rate || 20)).length;
+                const total = regRecs.length || 1;
+                return +(cnt / total * 100).toFixed(1);
+              }),
+              color: g.color,
+            });
+          });
+          break;
+        }
+        case 'temperature': {
+          const groups = [
+            { name: '正常 (37.5-39.0)', color: '#00e676', test: t => t >= 37.5 && t <= 39.0 },
+            { name: '过低 (<37.5)', color: '#448aff', test: t => t < 37.5 },
+            { name: '过高 (>39.0)', color: '#ff3b5c', test: t => t > 39.0 },
+          ];
+          groups.forEach(g => {
+            series.push({
+              name: g.name,
+              data: regions.map(reg => {
+                const regRecs = byRegion[reg] || [];
+                const cnt = regRecs.filter(r => g.test(r.temperature || 38.2)).length;
+                const total = regRecs.length || 1;
+                return +(cnt / total * 100).toFixed(1);
+              }),
+              color: g.color,
+            });
+          });
+          break;
+        }
+        case 'pace': {
+          const groups = [
+            { name: '正常', color: '#00e676', test: p => p <= 80 },
+            { name: '异常', color: '#ff3b5c', test: p => p > 80 },
+          ];
+          groups.forEach(g => {
+            series.push({
+              name: g.name,
+              data: regions.map(reg => {
+                const regRecs = byRegion[reg] || [];
+                const paceVals = regRecs.map(r => r.steps ? (Math.round(r.steps / 10) % 100) : 10);
+                const cnt = paceVals.filter(v => g.test(v)).length;
+                const total = paceVals.length || 1;
+                return +(cnt / total * 100).toFixed(1);
+              }),
+              color: g.color,
+            });
+          });
+          break;
+        }
+        case 'anomalyEvent': {
+          const anomalyByDevice = {};
+          liveDevices.value.forEach(d => { anomalyByDevice[d.deviceId] = d.anomaly; });
+          const types = ['无异常', '心脏异常', '呼吸异常', '骨骼异常'];
+          const typeColors = { '无异常': '#00e676', '心脏异常': '#ff3b5c', '呼吸异常': '#ff9100', '骨骼异常': '#ffffff' };
+          types.forEach(t => {
+            series.push({
+              name: t,
+              data: regions.map(reg => {
+                const uniqueDevs = new Set((byRegion[reg] || []).map(r => r.device_id));
+                let count = 0;
+                uniqueDevs.forEach(did => { if ((anomalyByDevice[did] || '无异常') === t) count++; });
+                return count || 0;
+              }),
+              color: typeColors[t],
+            });
+          });
+          break;
+        }
+      }
+      barDataStore[dim.id] = { categories: regions, series };
+    }
+
+    function updateHistoricalStats(idx, records) {
+      const dim = dimensions[idx];
+      const tm = dim.timeMode;
+      const timeLabel = tm === '24h' ? '过去24小时' : '过去7天';
+      if (!records || records.length === 0) {
+        dim.alerts[tm] = timeLabel + '暂无数据';
+        return;
+      }
+      const total = records.length;
+      switch (dim.id) {
+        case 'dogSize': {
+          dim.alerts[tm] = `${timeLabel}内共 ${new Set(records.map(r => r.device_id)).size} 台活跃设备`;
+          break;
+        }
+        case 'heartRate': {
+          let normal = 0, fast = 0, slow = 0;
+          let sumHr = 0, cntHr = 0;
+          records.forEach(r => {
+            const hr = r.heart_rate || 80;
+            sumHr += hr; cntHr++;
+            if (hr > 140) fast++; else if (hr < 60) slow++; else normal++;
+          });
+          dim.stats[0].value = (normal / total * 100).toFixed(1) + '%';
+          dim.stats[1].value = (fast / total * 100).toFixed(1) + '%';
+          dim.stats[2].value = (slow / total * 100).toFixed(1) + '%';
+          dim.alerts[tm] = (fast + slow) > 0
+            ? `${timeLabel}内 ${fast + slow} 条心率异常记录，均值 ${(sumHr / cntHr).toFixed(0)} bpm`
+            : `${timeLabel}内心率正常，均值 ${(sumHr / cntHr).toFixed(0)} bpm`;
+          break;
+        }
+        case 'status': {
+          let walking = 0, resting = 0, sleeping = 0;
+          records.forEach(r => {
+            const bh = r.behavior || 'resting';
+            if (bh === 'walking' || bh === 'running') walking++;
+            else if (bh === 'sleeping') sleeping++;
+            else resting++;
+          });
+          dim.stats[0].value = (walking / total * 100).toFixed(1) + '%';
+          dim.stats[1].value = (resting / total * 100).toFixed(1) + '%';
+          dim.stats[2].value = (sleeping / total * 100).toFixed(1) + '%';
+          dim.alerts[tm] = `${timeLabel}内运动 ${walking} 次 · 静息 ${resting} 次 · 睡眠 ${sleeping} 次`;
+          break;
+        }
+        case 'respiration': {
+          let normal = 0, slow = 0, fast = 0;
+          let sumRr = 0;
+          records.forEach(r => {
+            const rr = r.resp_rate || 20;
+            sumRr += rr;
+            if (rr > 30) fast++; else if (rr < 10) slow++; else normal++;
+          });
+          dim.stats[0].value = (normal / total * 100).toFixed(1) + '%';
+          dim.stats[1].value = (slow / total * 100).toFixed(1) + '%';
+          dim.stats[2].value = (fast / total * 100).toFixed(1) + '%';
+          dim.alerts[tm] = (fast + slow) > 0
+            ? `${timeLabel}内 ${fast + slow} 条呼吸异常，均值 ${(sumRr / total).toFixed(0)} 次/分`
+            : `${timeLabel}内呼吸正常，均值 ${(sumRr / total).toFixed(0)} 次/分`;
+          break;
+        }
+        case 'temperature': {
+          let normal = 0, low = 0, high = 0;
+          let sumT = 0;
+          records.forEach(r => {
+            const t = r.temperature || 38.2;
+            sumT += t;
+            if (t > 39.0) high++; else if (t < 37.5) low++; else normal++;
+          });
+          dim.stats[0].value = (normal / total * 100).toFixed(1) + '%';
+          dim.stats[1].value = (low / total * 100).toFixed(1) + '%';
+          dim.stats[2].value = (high / total * 100).toFixed(1) + '%';
+          dim.alerts[tm] = (high + low) > 0
+            ? `${timeLabel}内 ${high + low} 条体温异常，均值 ${(sumT / total).toFixed(1)}°C`
+            : `${timeLabel}内体温正常，均值 ${(sumT / total).toFixed(1)}°C`;
+          break;
+        }
+        case 'pace': {
+          let normal = 0, anomaly = 0;
+          let sumP = 0, cntP = 0;
+          records.forEach(r => {
+            const p = r.steps ? (Math.round(r.steps / 10) % 100) : 10;
+            sumP += p; cntP++;
+            if (p > 80) anomaly++; else normal++;
+          });
+          dim.stats[0].value = (normal / total * 100).toFixed(1) + '%';
+          dim.stats[1].value = (anomaly / total * 100).toFixed(1) + '%';
+          dim.alerts[tm] = anomaly > 0
+            ? `${timeLabel}内 ${anomaly} 条步频异常，均值 ${(sumP / cntP).toFixed(0)} 步/分`
+            : `${timeLabel}内步频正常，均值 ${(sumP / cntP).toFixed(0)} 步/分`;
+          break;
+        }
+        case 'anomalyEvent': {
+          const anomalyByDevice = {};
+          liveDevices.value.forEach(d => { anomalyByDevice[d.deviceId] = d.anomaly; });
+          const uniqueDevs = new Set(records.map(r => r.device_id));
+          let noAnom = 0, heart = 0, resp = 0, bone = 0;
+          uniqueDevs.forEach(did => {
+            const a = anomalyByDevice[did] || '无异常';
+            if (a === '心脏异常') heart++;
+            else if (a === '呼吸异常') resp++;
+            else if (a === '骨骼异常') bone++;
+            else noAnom++;
+          });
+          dim.stats[0].value = (noAnom / uniqueDevs.size * 100).toFixed(1) + '%';
+          const totalAnom = heart + resp + bone;
+          dim.alerts[tm] = totalAnom > 0
+            ? `${timeLabel}内检测到 ${totalAnom} 台设备异常`
+            : `${timeLabel}内 ${uniqueDevs.size} 台设备均无异常`;
+          break;
+        }
+      }
+    }
+
+    async function onHistoricalModeChange(idx) {
+      const dim = dimensions[idx];
+      if (dim.timeMode !== 'realtime') {
+        try {
+          const records = await fetchHistoricalData(dim.timeMode);
+          computeHistoricalBarData(idx, records);
+          updateHistoricalStats(idx, records);
+        } catch (e) {
+          console.warn('[PetNode] Historical data processing failed:', e);
+        }
+      }
+      renderPanelChart(idx);
+    }
+
     /* ── Render dimension panel chart ── */
     function renderPanelChart(idx) {
       nextTick(() => {
@@ -978,7 +1323,7 @@ const app = createApp({
           if (dim.timeMode === 'realtime') {
             inst = buildPie(dom, dim.getPieData());
           } else {
-            const bd = dim.getBarData();
+            const bd = barDataStore[dim.id] || dim.getBarData();
             inst = buildBar(dom, bd.series, bd.categories);
           }
           panelCharts[idx] = inst;
@@ -1189,7 +1534,7 @@ const app = createApp({
     }
 
     function onTimeModeChange(idx) {
-      renderPanelChart(idx);
+      onHistoricalModeChange(idx);
     }
 
     watch(activePanel, (newArr, oldArr) => {
@@ -1463,7 +1808,7 @@ const app = createApp({
     return {
       dimensions, activePanel, mapContainer, curtainEl, infoboxEl, chatMessages,
       panelStatus, infobox, bgOffset, currentTime, chatInput, chatList,
-      sendChat, setChartRef, onPanelChange, onTimeModeChange, resetBgOffset, mapEditMode, onMapWheel, bgScale, exitDashboard,
+      sendChat, setChartRef, onPanelChange, onTimeModeChange, onHistoricalModeChange, resetBgOffset, mapEditMode, onMapWheel, bgScale, exitDashboard,
       backendConnected, backendChecking, liveDeviceCount,
     };
   },

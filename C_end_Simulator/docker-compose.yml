@@ -33,9 +33,9 @@ services:
     container_name: petnode-rabbitmq
     restart: unless-stopped
     ports:
-    #原本是 5672（AMQP 协议标准端口）和 15672（管理界面），但 Windows 上 5584-5683 端口被系统占用，改用 5722 避免冲突
-      - "5672:5672"    # AMQP（Windows 端口排除 5041-5983，用 6200 避免冲突）
-      - "15672:15672"  # 管理台（http://localhost:15672，默认 guest/guest）
+    # 5672/15672 在 Windows 被系统保留范围覆盖，改用高位端口
+      - "6200:5672"    # AMQP
+      - "16200:15672"  # 管理台（http://localhost:16200，默认 guest/guest）
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
