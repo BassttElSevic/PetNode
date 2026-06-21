@@ -2,7 +2,7 @@
 
 **重庆大学明月科创实验班 · C端App设计项目制课程大项目**
 
-PetNode 是一套完整的宠物智能项圈模拟与监控系统，通过 Docker 编排的微服务集群模拟 C 端设备生产数据，配合 Flask 服务器、MySQL/MongoDB 双存储层以及微信小程序前端，覆盖从 **数据产生 → 传输 → 持久化 → 前端消费** 的完整链路。
+PetNode 是一套完整的宠物智能项圈模拟与监控系统，通过 Docker 编排的微服务集群模拟 C 端设备生产数据，配合 Flask 服务器、MySQL/MongoDB 双存储层、微信小程序前端以及管理后台，覆盖从 **数据产生 → 传输 → 持久化 → 前端消费 → 管理监控** 的完整链路。
 
 ---
 
@@ -15,6 +15,7 @@ PetNode 是一套完整的宠物智能项圈模拟与监控系统，通过 Docke
 - [完整 API 接口清单](#完整-api-接口清单)
   - [设备数据层（Engine → Flask）](#设备数据层engine--flask)
   - [微信端 API（微信小程序 → Flask）](#微信端-api微信小程序--flask)
+  - [管理端 API（Admin Dashboard → Flask）](#管理端-apiadmin-dashboard--flask)
   - [内部存储层（Flask → MySQL/MongoDB）](#内部存储层flask--mysqlmongodb)
 - [数据库结构](#数据库结构)
   - [MySQL 规范化表结构](#mysql-规范化表结构)
@@ -29,45 +30,132 @@ PetNode 是一套完整的宠物智能项圈模拟与监控系统，通过 Docke
 
 ```
 PetNode/
-├── C_end_Simulator/              # 核心模拟系统（后端 + 数据引擎）
-│   ├── docker-compose.yml        # Docker 编排（6 个服务）
+├── C_end_Simulator/              # 核心模拟系统（后端 + 数据引擎 + 监控 UI）
+│   ├── docker-compose.yml        # Docker 编排（7 个服务）
+│   ├── Jenkinsfile               # Jenkins CI/CD 流水线
+│   ├── pytest.ini                # 测试配置
+│   ├── run_demo.sh               # 一键演示脚本
+│   ├── verify_network.sh         # 网络连通性验证
 │   ├── engine/                   # 数据生成引擎（模拟狗项圈）
-│   │   ├── main.py               # 主调度器，支持 HTTP / MQ 双通道上报
-│   │   ├── exporters/            # 数据导出器（HTTP / MQ / File）
-│   │   ├── models/               # 数据模型（SmartCollar、Record）
-│   │   ├── traits/               # 特征生成器（心率、呼吸、体温等）
-│   │   ├── events/               # 事件模拟（发烧、受伤）
+│   │   ├── main.py               # 主调度器，多线程数据生成 + 指令轮询
+│   │   ├── models/               # 数据模型
+│   │   │   ├── dog_profile.py    # 犬只长期档案（品种/年龄/GPS基线）
+│   │   │   └── smart_collar.py   # 智能项圈（OOP封装，每tick生成1条record）
+│   │   ├── traits/               # 慢性病特征修正器
+│   │   │   ├── base_trait.py     # 基类（5组修正 + 漂移机制）
+│   │   │   ├── cardiac.py        # 心脏病风险（HR+10, 波动×1.2）
+│   │   │   ├── respiratory.py    # 呼吸道风险（RR+4, 波动×1.2）
+│   │   │   └── ortho.py          # 骨科风险（步数×0.75, 受伤概率×2）
+│   │   ├── events/               # 急性事件模拟（状态机驱动）
+│   │   │   ├── base_event.py     # 基类（EventPhase: onset→peak→recovery）
+│   │   │   ├── event_manager.py  # 事件管理器（每日概率触发）
+│   │   │   ├── fever.py          # 发烧事件（体温+1.5°C, HR+15bpm）
+│   │   │   └── injury.py         # 受伤事件（步数≈0, GPS静止）
+│   │   ├── exporters/            # 数据导出器（策略模式）
+│   │   │   ├── base_exporter.py  # 导出器基类 ABC
+│   │   │   ├── file_exporter.py  # JSONL 文件导出
+│   │   │   ├── http_exporter.py  # HTTP POST 导出（API Key + HMAC签名）
+│   │   │   └── mq_exporter.py    # RabbitMQ 发布（AMQP）
+│   │   ├── listeners/            # 指令接收器
+│   │   │   ├── base_listener.py  # 监听器基类 ABC
+│   │   │   ├── dummy_listener.py # 哑监听器（无服务器连接）
+│   │   │   └── ws_listener.py    # WebSocket 监听器（预留）
 │   │   └── Dockerfile
 │   ├── flask_server/             # S端 Flask 数据服务器
-│   │   ├── app.py                # 主应用 + 设备数据接收接口
-│   │   ├── auth.py               # JWT 鉴权
-│   │   ├── db.py                 # MongoDB 连接（vx API 用）
-│   │   ├── mq_worker.py          # RabbitMQ 消费者
-│   │   ├── blueprints/           # 微信端 API 蓝图
-│   │   │   ├── wechat.py         # /api/v1/wechat/* 认证绑定
+│   │   ├── app.py                # 主应用（设备数据接收 + 查询接口）
+│   │   ├── auth.py               # JWT 鉴权（生成/验证 access_token）
+│   │   ├── db.py                 # MongoDB 连接管理
+│   │   ├── helpers.py            # 工具函数（响应封装/时间处理）
+│   │   ├── mq_worker.py          # RabbitMQ 消费者（验签+双写入库）
+│   │   ├── blueprints/           # API 蓝图
+│   │   │   ├── wechat.py         # /api/v1/wechat/* 微信认证绑定
 │   │   │   ├── users.py          # /api/v1/me 用户信息
 │   │   │   ├── pets.py           # /api/v1/pets/* 宠物遥测
 │   │   │   ├── devices.py        # /api/v1/devices/* 设备绑定
-│   │   │   └── family.py         # /api/v1/family/* 家庭组
+│   │   │   ├── family.py         # /api/v1/family/* 家庭组
+│   │   │   └── admin.py          # /api/v1/admin/* 管理后台
 │   │   ├── services/             # 业务逻辑层
-│   │   │   ├── identity.py       # 用户身份
-│   │   │   ├── binding.py        # 设备/宠物绑定
-│   │   │   ├── telemetry.py      # 遥测数据查询
+│   │   │   ├── identity.py       # 用户身份标识 & 哈希
+│   │   │   ├── binding.py        # 设备/宠物绑定 & 权限校验
+│   │   │   ├── telemetry.py      # 遥测数据查询 & 事件管理
 │   │   │   └── family.py         # 家庭组逻辑
-│   │   └── storage/              # 存储适配层
-│   │       ├── mongo_storage.py  # MongoDB（全量实时数据）
-│   │       └── mysql_storage.py  # MySQL（规范化档案+异常记录）
-│   ├── ui_tui/                   # 终端监控 TUI（Textual）
-│   ├── ui_gui/                   # 图形监控 GUI
-│   └── tests/                    # 单元测试 + 集成测试
-└── wechat/
-    └── WeChat_miniprogram/       # 微信小程序前端
-        ├── utils/api.js          # 统一 API 请求封装
-        ├── pages/login/          # 微信登录页
-        ├── pages/index/          # 宠物列表首页
-        ├── pages/petDetail/      # 宠物详情（健康图表 + 地图）
-        ├── pages/profile/        # 个人资料
-        └── pages/health/         # 健康概览
+│   │   ├── storage/              # 存储适配层（策略模式）
+│   │   │   ├── base_storage.py   # 存储基类 ABC
+│   │   │   ├── file_storage.py   # JSONL 文件持久化
+│   │   │   ├── mongo_storage.py  # MongoDB（全量实时数据）
+│   │   │   └── mysql_storage.py  # MySQL（规范化档案+异常记录）
+│   │   └── Dockerfile
+│   ├── ui_tui/                   # 终端监控 TUI（Textual 框架）
+│   │   ├── app.py                # TUI 入口
+│   │   ├── Dockerfile
+│   │   ├── backend/              # TUI 后端通信
+│   │   │   ├── command_api.py    # 指令 API（TUI→Engine）
+│   │   │   ├── data_api.py       # 数据 API（读取实时流）
+│   │   │   └── user_store.py     # 本地会话存储
+│   │   └── screens/              # TUI 界面
+│   │       ├── login_screen.py   # 登录界面
+│   │       └── dashboard_screen.py # 监控仪表盘
+│   ├── ui_gui/                   # 桌面图形监控 GUI（PyQt6）
+│   │   ├── app.py                # GUI 入口
+│   │   ├── login_window.py       # 登录窗口
+│   │   ├── register_window.py    # 注册窗口
+│   │   ├── ForgetPassword_window.py # 找回密码窗口
+│   │   └── main_window.py        # 主监控窗口
+│   ├── output_data/              # Engine ↔ TUI/GUI 共享通信目录
+│   │   ├── realtime_stream.jsonl # 实时数据流（Engine→UI）
+│   │   ├── command.json          # 控制指令（UI→Engine）
+│   │   └── engine_status.json    # 引擎运行状态
+│   ├── tests/                    # 测试套件
+│   │   ├── test_step1_data_generation.py  # 数据生成单元测试
+│   │   ├── test_step2_file_exporter.py    # 文件导出测试
+│   │   ├── test_step3_scheduler.py        # 调度器集成测试
+│   │   ├── test_step4_docker_build.py     # Docker 构建测试
+│   │   ├── test_step4_module_health.py    # 模块健康检查
+│   │   ├── test_step4_multithreading.py   # 多线程测试
+│   │   ├── test_step5_tui_backend.py      # TUI 后端测试
+│   │   ├── test_vx_api.py                 # 微信 API 集成测试
+│   │   └── test_internal_services.py      # 内部服务单元测试
+│   └── scripts/                  # 辅助脚本
+│       └── demo_classroom.py     # 课堂演示脚本
+├── PetNode.com(final)/           # 官网 + 管理后台（静态前端）
+│   ├── index.html                # 产品官网首页
+│   ├── admin.html                # 管理后台仪表盘
+│   ├── css/                      # 样式文件
+│   │   ├── global.css            # 全局样式
+│   │   └── main.css              # 主样式
+│   ├── js/                       # 脚本文件
+│   │   ├── main.js               # 首页逻辑
+│   │   ├── api.js                # API 集成层
+│   │   └── components.js         # 组件工具
+│   └── assets/                   # 静态资源
+│       ├── images/               # 产品图片/头像
+│       └── icons/                # 功能图标
+├── wechat/
+│   └── WeChat_miniprogram/       # 微信小程序前端
+│       ├── app.js                # 全局入口
+│       ├── app.json              # 小程序配置（13个页面）
+│       ├── utils/api.js          # 统一 API 请求封装
+│       ├── components/           # 自定义组件
+│       │   └── navigation-bar/   # 自定义导航栏
+│       ├── images/               # 图片资源
+│       └── pages/                # 页面（共13个）
+│           ├── index/            # 宠物列表首页
+│           ├── login/            # 微信登录
+│           ├── petDetail/        # 宠物详情（健康图表+地图）
+│           ├── health/           # 健康概览
+│           ├── profile/          # 个人资料
+│           ├── settings/         # 应用设置
+│           ├── deviceManage/     # 设备管理
+│           ├── multiDevice/      # 多设备切换
+│           ├── familyManage/     # 家庭组管理
+│           ├── consumables/      # 耗材/配件
+│           ├── joke/             # 趣味内容
+│           ├── inviteRemark/     # 邀请备注
+│           └── inviteShare/      # 邀请分享
+└── deploy/                       # 部署配置
+    ├── README_DEPLOY_CN.md       # 部署指南（中文）
+    └── nginx/
+        └── pppetnode.com.conf    # Nginx 反向代理配置
 ```
 
 ---
@@ -75,49 +163,60 @@ PetNode/
 ## 技术架构概览
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Docker Compose 编排                          │
-│                                                                 │
-│  ┌────────────┐   MQ推送    ┌─────────────┐                     │
-│  │   engine   │──────────▶│  rabbitmq   │                     │
-│  │（数据生成）  │            │（消息队列）  │                     │
-│  └─────┬──────┘            └──────┬──────┘                     │
-│        │ HTTP POST                │ AMQP消费                    │
-│        │ /api/data                │                            │
-│        ▼                          ▼                            │
-│  ┌────────────────────────────────────────┐                    │
-│  │          flask-server :5000            │                    │
-│  │   ┌──────────────────────────────────┐ │                    │
-│  │   │  设备数据层 (Engine数据入口)        │ │                    │
-│  │   │  POST /api/data                  │ │                    │
-│  │   │  GET  /api/records               │ │                    │
-│  │   │  GET  /api/profile               │ │                    │
-│  │   ├──────────────────────────────────┤ │                    │
-│  │   │  微信端 API (vx Blueprint)         │ │ ◀── 微信小程序      │
-│  │   │  /api/v1/wechat/*                │ │                    │
-│  │   │  /api/v1/me                      │ │                    │
-│  │   │  /api/v1/pets/*                  │ │                    │
-│  │   │  /api/v1/devices/*               │ │                    │
-│  │   │  /api/v1/family/*                │ │                    │
-│  │   └──────────────────────────────────┘ │                    │
-│  └────────┬───────────────────────────────┘                    │
-│           │                                                     │
-│    ┌──────┴───────┐                                             │
-│    ▼              ▼                                             │
-│ ┌──────┐     ┌────────┐                                         │
-│ │mongo │     │ mysql  │                                         │
-│ │:27017│     │ :3306  │                                         │
-│ │全量实时│    │规范化档案│                                        │
-│ │遥测数据│    │+异常记录│                                        │
-│ └──────┘     └────────┘                                         │
-│                                                                 │
-│  ┌──────────────┐  （可选，按需交互式启动）                         │
-│  │  tui         │  docker compose --profile tui run --rm tui   │
-│  │  终端监控界面  │                                               │
-│  └──────────────┘                                               │
-└─────────────────────────────────────────────────────────────────┘
-         ▲ 微信小程序通过 BASE_URL 访问 Flask API
-         │ utils/api.js → http://<服务器IP>:5000/api/v1
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                        Docker Compose 编排                                      │
+│                                                                                │
+│  ┌────────────┐   AMQP推送    ┌─────────────┐                                 │
+│  │   engine   │──────────────▶│  rabbitmq   │                                 │
+│  │（数据生成）  │              │（消息队列）  │                                 │
+│  └─────┬──────┘              └──────┬──────┘                                 │
+│        │ HTTP POST                  │ AMQP消费                                │
+│        │ /api/data                  │                                         │
+│        ▼                            ▼                                         │
+│  ┌────────────────────────────────────────────────┐                           │
+│  │            flask-server :5000                  │                           │
+│  │   ┌──────────────────────────────────────────┐ │                           │
+│  │   │  设备数据层 (Engine数据入口)                │ │                           │
+│  │   │  POST /api/data                          │ │                           │
+│  │   │  GET  /api/records                       │ │                           │
+│  │   │  GET  /api/profile                       │ │                           │
+│  │   ├──────────────────────────────────────────┤ │                           │
+│  │   │  微信端 API (vx Blueprint)                │ │ ◀── 微信小程序             │
+│  │   │  /api/v1/wechat/*                        │ │                           │
+│  │   │  /api/v1/me                              │ │                           │
+│  │   │  /api/v1/pets/*                          │ │                           │
+│  │   │  /api/v1/devices/*                       │ │                           │
+│  │   │  /api/v1/family/*                        │ │                           │
+│  │   ├──────────────────────────────────────────┤ │                           │
+│  │   │  管理端 API (Admin Blueprint)             │ │ ◀── 管理后台              │
+│  │   │  /api/v1/admin/*                         │ │     (admin.html)          │
+│  │   └──────────────────────────────────────────┘ │                           │
+│  └────────┬───────────────────────────────────────┘                           │
+│           │                                                                    │
+│    ┌──────┴───────┐                                                            │
+│    ▼              ▼                                                            │
+│ ┌──────┐     ┌────────┐                                                       │
+│ │mongo │     │ mysql  │                                                       │
+│ │:27017│     │ :3306  │                                                       │
+│ │全量实时│    │规范化档案│                                                      │
+│ │遥测数据│    │+异常记录│                                                      │
+│ └──────┘     └────────┘                                                       │
+│                                                                                │
+│  ┌──────────────┐  （可选，按需交互式启动）                                       │
+│  │  tui         │  docker compose --profile tui run --rm tui                  │
+│  │  终端监控界面  │                                                             │
+│  └──────────────┘                                                             │
+└────────────────────────────────────────────────────────────────────────────────┘
+         ▲ 微信小程序              ▲ 管理后台
+         │ utils/api.js            │ PetNode.com(final)/admin.html
+         │ → Flask /api/v1         │ → Flask /api/v1/admin
+         │                         │
+    ┌────┴────────────────────┐    │
+    │  Nginx 反向代理           │────┘
+    │  pppetnode.com :443      │
+    │  /api/ → Flask :5000     │
+    │  /    → 静态前端          │
+    └──────────────────────────┘
 ```
 
 ---
@@ -126,13 +225,15 @@ PetNode/
 
 | 服务名 | 镜像/构建 | 端口 | 职责 |
 |--------|----------|------|------|
-| `rabbitmq` | `rabbitmq:3-management` | 5672 / 15672 | AMQP 消息队列；Engine → mq-worker |
-| `mongodb` | `mongo:7` | 27017 | 全量实时遥测数据持久化（vx API 读写） |
+| `rabbitmq` | `rabbitmq:3-management` | 6200(AMQP) / 16200(管理台) | AMQP 消息队列；Engine → mq-worker |
+| `mongodb` | `mongo:7` | 27017 | 全量实时遥测数据持久化（vx API + Admin API 读写） |
 | `mysql` | `mysql:8` | 3306 | 规范化档案（user/device/telemetry/event） |
-| `flask-server` | 本地构建 | 5000 | HTTP API 服务器；接收设备数据 + 提供微信端 API |
+| `flask-server` | 本地构建 | 5000 | HTTP API 服务器；接收设备数据 + 微信端 API + 管理端 API |
 | `mq-worker` | 本地构建（同 flask） | — | RabbitMQ 消费者；鉴权验签后写入 Mongo+MySQL |
-| `engine` | 本地构建 | — | 模拟狗项圈，持续生成 JSON 数据并上报 |
-| `tui` *(profile)* | 本地构建 | — | 终端可视化监控，按需启动 |
+| `engine` | 本地构建 | — | 模拟狗项圈（10只狗，1秒/tick），持续生成 JSON 数据并上报 |
+| `tui` *(profile)* | 本地构建 | — | 终端可视化监控（Textual），按需启动 |
+
+> **注意**：GUI（PyQt6 桌面应用）不在 Docker 编排中，需在宿主机直接运行 `python -m ui_gui.app`。
 
 ---
 
@@ -166,13 +267,13 @@ PetNode/
               │ EXPORT_BACKEND 决定路径                      │
               ▼                                            ▼
   ┌───────────────────────┐              ┌─────────────────────────────────┐
-  │  STEP 2a：HTTP 模式    │              │  STEP 2b：MQ 模式                │
+  │  STEP 2a：HTTP 模式    │              │  STEP 2b：MQ 模式（默认）         │
   │                       │              │                                 │
   │  HttpExporter          │              │  MqExporter                     │
   │  POST /api/data        │              │  → RabbitMQ queue               │
-  │  Authorization: Bearer │              │    petnode.records              │
+  │  Authorization: ******              │    petnode.records              │
   │  X-Signature: HMAC-256 │              │  headers:                       │
-  └───────────┬───────────┘              │    Authorization: Bearer        │
+  └───────────┬───────────┘              │    Authorization: ******
               │                          │    X-Signature: HMAC-256        │
               ▼                          └──────────────┬──────────────────┘
   ┌───────────────────────┐                             │
@@ -238,6 +339,23 @@ PetNode/
   │                                                                        │
   │  微信小程序展示：地图定位 + 健康图表（心率/呼吸/体温折线图）                    │
   └────────────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  STEP 6：管理后台监控（Admin Dashboard）                                  │
+  │                                                                        │
+  │  ① 管理员打开 admin.html                                                │
+  │     POST /api/v1/admin/login  { username, password }                   │
+  │     → 返回 access_token                                                │
+  │                                                                        │
+  │  ② GET /api/v1/admin/stats  → 仪表盘统计                               │
+  │     （活跃设备数/心率分布/行为分布/平均指标/活跃事件）                        │
+  │                                                                        │
+  │  ③ GET /api/v1/admin/devices/realtime  → 实时设备列表                   │
+  │     （所有活跃设备最新遥测快照）                                            │
+  │                                                                        │
+  │  ④ GET /api/v1/admin/devices/{device_id}/detail  → 设备详情            │
+  │     （快照 + 心率/呼吸/体温序列 + 近期事件）                                │
+  └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -250,7 +368,7 @@ PetNode/
 
 | 方法 | 路径 | 鉴权方式 | 说明 |
 |------|------|---------|------|
-| `POST` | `/api/data` | Bearer API Key + HMAC-SHA256 签名 | 接收一条设备遥测数据（Engine 专用入口） |
+| `POST` | `/api/data` | ****** Key + HMAC-SHA256 签名 | 接收一条设备遥测数据（Engine 专用入口） |
 | `GET` | `/api/health` | 无 | 服务健康检查，返回 `status: healthy` |
 | `GET` | `/api/records` | 无 | 统一查询接口（`source=mongo\|mysql`, `kind=records\|anomalies\|profile`） |
 | `GET` | `/api/v1/records` | 无 | 同上（v1 别名） |
@@ -265,7 +383,7 @@ PetNode/
 
 ```http
 POST /api/data
-Authorization: Bearer petnode_secret_key_2026
+Authorization: ******
 X-Signature: <HMAC-SHA256(request_body)>
 Content-Type: application/json
 
@@ -289,7 +407,7 @@ Content-Type: application/json
 
 ### 微信端 API（微信小程序 → Flask）
 
-> 所有 `/api/v1/*` 接口均使用 JWT Bearer 鉴权（`access_token`，7天有效）。
+> 所有 `/api/v1/*` 接口均使用 JWT ******
 > 统一响应格式：`{"code": 0, "message": "ok", "data": {...}}`
 
 #### 1. 微信认证模块
@@ -297,8 +415,8 @@ Content-Type: application/json
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
 | `POST` | `/api/v1/wechat/auth` | 无 | wx.login() code 换取微信身份票据；已绑定则同时返回 access_token |
-| `POST` | `/api/v1/wechat/bind` | 可选 Bearer | 微信身份绑定系统用户；无 token 时自动创建新用户 |
-| `POST` | `/api/v1/wechat/unbind` | ✅ Bearer | 解除当前用户微信绑定 |
+| `POST` | `/api/v1/wechat/bind` | 可选 ****** 微信身份绑定系统用户；无 token 时自动创建新用户 |
+| `POST` | `/api/v1/wechat/unbind` | ✅ ****** 解除当前用户微信绑定 |
 
 **`POST /api/v1/wechat/auth`**
 
@@ -313,14 +431,14 @@ Content-Type: application/json
 
 ```
 请求体：{ "wx_identity_token": "<由/wechat/auth返回>" }
-可选头：Authorization: Bearer <已有access_token>（用于绑定到现有账号）
+可选头：Authorization: ******
 返回：{ "bind_status": "bound"|"already_bound", "user_id": "...", "bound_at": "...", "access_token": "..." }
 ```
 
 **`POST /api/v1/wechat/unbind`**
 
 ```
-请求头：Authorization: Bearer <access_token>
+请求头：Authorization: ******
 返回：{ "unbind_status": "unbound"|"not_bound", "user_id": "...", "unbound_at": "..." }
 ```
 
@@ -330,8 +448,8 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `GET` | `/api/v1/me` | ✅ Bearer | 查询当前用户基本信息 + 绑定宠物列表 |
-| `PUT` | `/api/v1/me` | ✅ Bearer | 修改用户昵称/头像 |
+| `GET` | `/api/v1/me` | ✅ ****** 查询当前用户基本信息 + 绑定宠物列表 |
+| `PUT` | `/api/v1/me` | ✅ ****** 修改用户昵称/头像 |
 
 **`GET /api/v1/me`**
 
@@ -358,8 +476,8 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `POST` | `/api/v1/devices/bind` | ✅ Bearer | 认领设备（项圈），建立宠物档案 |
-| `POST` | `/api/v1/devices/{device_id}/unbind` | ✅ Bearer | 解除设备绑定 |
+| `POST` | `/api/v1/devices/bind` | ✅ ****** 认领设备（项圈），建立宠物档案 |
+| `POST` | `/api/v1/devices/{device_id}/unbind` | ✅ ****** 解除设备绑定 |
 
 **`POST /api/v1/devices/bind`**
 
@@ -387,17 +505,17 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `GET` | `/api/v1/pets` | ✅ Bearer | 宠物列表（本人绑定 + 家庭共享） |
-| `GET` | `/api/v1/pets/{pet_id}/summary` | ✅ Bearer | 宠物首页概览（最新快照） |
-| `GET` | `/api/v1/pets/{pet_id}/respiration/latest` | ✅ Bearer | 最新呼吸频率 |
-| `GET` | `/api/v1/pets/{pet_id}/respiration/series` | ✅ Bearer | 呼吸频率时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/heart-rate/latest` | ✅ Bearer | 最新心率 |
-| `GET` | `/api/v1/pets/{pet_id}/heart-rate/series` | ✅ Bearer | 心率时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/temperature/series` | ✅ Bearer | 体温时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/location/latest` | ✅ Bearer | 最新 GPS 定位 |
-| `GET` | `/api/v1/pets/{pet_id}/events` | ✅ Bearer | 告警事件分页列表 |
-| `PUT` | `/api/v1/pets/{pet_id}/events/{event_id}/read` | ✅ Bearer | 标记告警已读（消除红点） |
-| `PUT` | `/api/v1/pets/{pet_id}` | ✅ Bearer | 修改宠物档案（仅 owner） |
+| `GET` | `/api/v1/pets` | ✅ ****** 宠物列表（本人绑定 + 家庭共享） |
+| `GET` | `/api/v1/pets/{pet_id}/summary` | ✅ ****** 宠物首页概览（最新快照） |
+| `GET` | `/api/v1/pets/{pet_id}/respiration/latest` | ✅ ****** 最新呼吸频率 |
+| `GET` | `/api/v1/pets/{pet_id}/respiration/series` | ✅ ****** 呼吸频率时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/heart-rate/latest` | ✅ ****** 最新心率 |
+| `GET` | `/api/v1/pets/{pet_id}/heart-rate/series` | ✅ ****** 心率时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/temperature/series` | ✅ ****** 体温时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/location/latest` | ✅ ****** 最新 GPS 定位 |
+| `GET` | `/api/v1/pets/{pet_id}/events` | ✅ ****** 告警事件分页列表 |
+| `PUT` | `/api/v1/pets/{pet_id}/events/{event_id}/read` | ✅ ****** 标记告警已读（消除红点） |
+| `PUT` | `/api/v1/pets/{pet_id}` | ✅ ****** 修改宠物档案（仅 owner） |
 
 **时序接口公共查询参数：**
 
@@ -455,11 +573,11 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `POST` | `/api/v1/family` | ✅ Bearer | 创建家庭组（幂等） |
-| `POST` | `/api/v1/family/invite` | ✅ Bearer | 生成邀请码（Owner 专用） |
-| `POST` | `/api/v1/family/join` | ✅ Bearer | 扫码加入家庭 |
-| `GET` | `/api/v1/family/members` | ✅ Bearer | 查看家庭成员列表 |
-| `DELETE` | `/api/v1/family/members/{user_id}` | ✅ Bearer | Owner 踢人 / 成员主动退出 |
+| `POST` | `/api/v1/family` | ✅ ****** 创建家庭组（幂等） |
+| `POST` | `/api/v1/family/invite` | ✅ ****** 生成邀请码（Owner 专用） |
+| `POST` | `/api/v1/family/join` | ✅ ****** 扫码加入家庭 |
+| `GET` | `/api/v1/family/members` | ✅ ****** 查看家庭成员列表 |
+| `DELETE` | `/api/v1/family/members/{user_id}` | ✅ ****** Owner 踢人 / 成员主动退出 |
 
 **`POST /api/v1/family/invite`**
 
@@ -484,6 +602,102 @@ Content-Type: application/json
     { "user_id": "...", "nickname": "小明", "role": "owner" },
     { "user_id": "...", "nickname": "小红", "role": "member" }
   ]
+}
+```
+
+---
+
+### 管理端 API（Admin Dashboard → Flask）
+
+> 管理后台通过 `/api/v1/admin/*` 接口提供仪表盘统计和实时设备监控功能。
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/v1/admin/login` | 无 | 管理员登录，返回 JWT access_token |
+| `GET` | `/api/v1/admin/stats` | 无 | 仪表盘聚合统计（活跃设备/心率分布/行为分布/平均指标） |
+| `GET` | `/api/v1/admin/devices/realtime` | 无 | 所有活跃设备的最新遥测快照（实时监控面板） |
+| `GET` | `/api/v1/admin/devices/{device_id}/detail` | 无 | 单设备详情（快照+时序曲线+近期事件） |
+
+**`POST /api/v1/admin/login`**
+
+```
+请求体：{ "username": "...", "password": "..." }
+返回：{ "access_token": "...", "user_id": "admin_xxx", "username": "...", "login_at": "..." }
+```
+
+**`GET /api/v1/admin/stats` 返回示例：**
+
+```json
+{
+  "active_devices": 10,
+  "total_recent_records": 200,
+  "sample_count": 200,
+  "averages": {
+    "heart_rate_bpm": 85.3,
+    "resp_rate_bpm": 15.2,
+    "temperature_c": 38.6,
+    "steps": 120
+  },
+  "heart_rate_distribution": {
+    "normal_60_140": 180,
+    "tachycardia_over_140": 10,
+    "low_under_60": 5,
+    "critical": 2
+  },
+  "behavior_distribution": {
+    "sleeping": 50,
+    "resting": 60,
+    "walking": 50,
+    "running": 40
+  },
+  "behavior_avg_hr": {
+    "sleeping": { "count": 50, "avg_hr": 65.2 },
+    "running": { "count": 40, "avg_hr": 135.8 }
+  },
+  "active_events": 3,
+  "device_ids": ["109f156a015a", "..."],
+  "generated_at": "2025-06-01T00:05:00"
+}
+```
+
+**`GET /api/v1/admin/devices/realtime` 返回示例：**
+
+```json
+{
+  "count": 10,
+  "devices": [
+    {
+      "device_id": "109f156a015a",
+      "pet_name": "旺财",
+      "timestamp": "2025-06-01T00:01:00",
+      "heart_rate": 66.2,
+      "resp_rate": 8.5,
+      "temperature": 38.45,
+      "steps": 0,
+      "battery": 100,
+      "behavior": "sleeping",
+      "gps_lat": 29.57,
+      "gps_lng": 106.45,
+      "event": null,
+      "event_phase": null
+    }
+  ],
+  "generated_at": "2025-06-01T00:05:00"
+}
+```
+
+**`GET /api/v1/admin/devices/{device_id}/detail` 返回示例：**
+
+```json
+{
+  "device_id": "109f156a015a",
+  "pet_name": "旺财",
+  "latest": { "timestamp": "...", "heart_rate": 66.2, "..." : "..." },
+  "heart_rate_series": { "unit": "bpm", "count": 50, "points": [...] },
+  "respiration_series": { "unit": "bpm", "count": 50, "points": [...] },
+  "temperature_series": { "unit": "°C", "count": 50, "points": [...] },
+  "recent_events": [{ "ts": "...", "type": "fever", "phase": "onset", "behavior": "resting" }],
+  "generated_at": "2025-06-01T00:05:00"
 }
 ```
 
@@ -577,9 +791,9 @@ family_invites              邀请码
 
 ## 接口联调注意事项
 
-1. **BASE_URL 配置**：微信小程序 `utils/api.js` 中 `BASE_URL = 'http://127.0.0.1:5000/api/v1'`，正式部署需改为服务器公网地址（如 `http://47.109.200.132:5000/api/v1`）。
+1. **BASE_URL 配置**：微信小程序 `utils/api.js` 中 `BASE_URL = 'http://127.0.0.1:5000'`，正式部署需改为服务器公网地址（如 `https://pppetnode.com`，通过 Nginx 反代）。
 
-2. **JWT Secret**：默认 `petnode_jwt_secret_2026`，可通过 `JWT_SECRET` 环境变量覆盖，生产环境必须修改为强随机密钥。
+2. **JWT Secret**：通过 `JWT_SECRET` 环境变量配置，生产环境必须修改为强随机密钥。
 
 3. **微信 mock 模式**：未配置 `WECHAT_APP_ID`/`WECHAT_APP_SECRET` 时，`code2Session` 进入 mock 模式，`openid = mock_openid_{code前8位}`，适合开发调试。
 
@@ -589,7 +803,12 @@ family_invites              邀请码
 
 6. **API Key vs JWT**：
    - `POST /api/data`（Engine 专用）：使用固定 API Key + HMAC 签名鉴权
-   - `/api/v1/*`（微信端）：使用 JWT Bearer Token 鉴权
+   - `/api/v1/*`（微信端）：使用 JWT ****** 鉴权
+   - `/api/v1/admin/*`（管理端）：登录后使用 JWT ******
+
+7. **管理员账号**：通过 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量配置（默认为测试账号，生产环境必须修改）。
+
+8. **三方密钥一致性**：`API_KEY` 和 `HMAC_KEY` 必须在 flask-server、mq-worker、engine 三个服务中保持一致。
 
 ---
 
@@ -599,7 +818,7 @@ family_invites              邀请码
 
 - Docker Engine ≥ 24.0
 - Docker Compose ≥ 2.20
-- 服务器开放端口：`5000`（API）、`27017`（MongoDB 调试）、`3306`（MySQL 调试，可选）、`15672`（RabbitMQ 管理台，可选）
+- 服务器开放端口：`5000`（API）、`27017`（MongoDB 调试）、`3306`（MySQL 调试，可选）、`16200`（RabbitMQ 管理台，可选）
 
 ### 1. 克隆并进入目录
 
@@ -608,26 +827,35 @@ git clone https://github.com/BassttElSevic/PetNode.git
 cd PetNode/C_end_Simulator
 ```
 
-### 2. 配置环境（按需修改 docker-compose.yml）
+### 2. 配置环境变量
 
-关键环境变量（`flask-server` 和 `mq-worker` 服务下）：
+在 `C_end_Simulator/` 目录下创建 `.env` 文件，或在 `docker-compose.yml` 中直接配置以下环境变量：
 
-```yaml
-environment:
-  # 微信小程序必须配置（否则走 mock 模式）
-  - WECHAT_APP_ID=your_wechat_app_id
-  - WECHAT_APP_SECRET=your_wechat_app_secret
+```bash
+# 微信小程序（否则走 mock 模式）
+WECHAT_APP_ID=your_wechat_app_id
+WECHAT_APP_SECRET=your_wechat_app_secret
 
-  # 生产环境强烈建议修改以下三个密钥
-  - JWT_SECRET=your_strong_random_jwt_secret
-  - API_KEY=your_strong_api_key
-  - HMAC_KEY=your_strong_hmac_key
+# 安全密钥（生产环境必须修改）
+JWT_SECRET=your_strong_random_jwt_secret
+API_KEY=your_strong_api_key
+HMAC_KEY=your_strong_hmac_key
+
+# MySQL 配置
+MYSQL_ROOT_PASSWORD=your_root_password
+MYSQL_USER=petnode_user
+MYSQL_PASSWORD=your_mysql_password
+MYSQL_DEFAULT_PASSWORD_HASH=your_sha256_hash
+
+# 管理员账号（可选，有默认值）
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_admin_password
 ```
 
-微信小程序同步修改 `utils/api.js`：
+微信小程序同步修改 `wechat/WeChat_miniprogram/utils/api.js`：
 
 ```javascript
-const BASE_URL = 'http://<你的服务器IP>:5000/api/v1';
+const BASE_URL = 'http://<你的服务器IP>:5000';
 ```
 
 ### 3. 构建并启动所有服务（推荐方式）
@@ -652,7 +880,7 @@ docker compose logs -f mq-worker
 ### 4. 按需分步启动（调试时）
 
 ```bash
-# 仅启动数据库服务
+# 仅启动基础设施服务
 docker compose up -d rabbitmq mongodb mysql
 
 # 等待数据库 healthy 后启动 Flask + mq-worker
@@ -671,7 +899,15 @@ docker compose up -d engine
 docker compose --profile tui run --rm tui
 ```
 
-### 6. 常用运维命令
+### 6. 启动 GUI 桌面监控（宿主机运行）
+
+```bash
+cd C_end_Simulator
+pip install -r ui_gui/requirements.txt
+python -m ui_gui.app
+```
+
+### 7. 常用运维命令
 
 ```bash
 # 停止所有服务
@@ -687,38 +923,43 @@ docker compose restart flask-server
 docker compose up -d --build flask-server
 
 # 进入 MySQL 容器执行 SQL
-docker exec -it petnode-mysql mysql -u petnode_user -ppetnode_password_2026 petnode
+docker exec -it petnode-mysql mysql -u ${MYSQL_USER} -p${MYSQL_PASSWORD} petnode
 
 # 进入 MongoDB 容器查询
 docker exec -it petnode-mongodb mongosh petnode
 
 # 查看 RabbitMQ 管理台
-# 浏览器打开 http://<服务器IP>:15672，默认账号 guest/guest
-
-# 备份 MySQL 数据
-docker exec petnode-mysql mysqldump -u petnode_user -ppetnode_password_2026 petnode > backup_$(date +%Y%m%d).sql
-
-# 恢复 MySQL 数据
-docker exec -i petnode-mysql mysql -u petnode_user -ppetnode_password_2026 petnode < backup.sql
+# 浏览器打开 http://<服务器IP>:16200，默认账号 guest/guest
 ```
 
-### 7. 服务启动顺序与健康依赖
+### 8. 服务启动顺序与健康依赖
 
 ```
 rabbitmq (healthy)
     ↓
-mongodb (healthy)
-    ↓
-mysql (healthy)
-    ↓
+mongodb (healthy)       mysql (healthy)
+    ↓                       ↓
+    └───────────┬───────────┘
+                ▼
 flask-server (healthy, GET /api/health 返回 200)
-    ↓
+                ↓
 mq-worker (started)
-    ↓
-engine (started)
+                ↓
+engine (started, 依赖 flask-server healthy + rabbitmq healthy + mq-worker started)
 ```
 
-### 8. 常见问题排查
+### 9. 生产部署（Nginx + SSL）
+
+项目已提供 Nginx 配置模板（`deploy/nginx/pppetnode.com.conf`）：
+
+- 域名：`pppetnode.com`
+- SSL：Let's Encrypt (Certbot)
+- `/api/` 反向代理到 Flask `:5000`
+- `/` 提供静态前端（`PetNode.com(final)/` 目录内容）
+- 安全头：HSTS、X-Frame-Options、X-Content-Type-Options
+- 静态资源 7 天浏览器缓存
+
+### 10. 常见问题排查
 
 | 问题 | 排查方法 |
 |------|---------|
@@ -726,8 +967,9 @@ engine (started)
 | MySQL 连接失败 | `docker compose logs mysql`，检查密码是否与环境变量一致 |
 | 微信登录失败 | 检查 `WECHAT_APP_ID`/`WECHAT_APP_SECRET` 是否正确；开发时可用 mock 模式 |
 | JWT 无效 | `JWT_SECRET` 环境变量需 flask-server 和微信端使用同一配置 |
-| RabbitMQ 队列积压 | 访问 http://IP:15672 查看队列状态，检查 mq-worker 日志 |
+| RabbitMQ 队列积压 | 访问 http://IP:16200 查看队列状态，检查 mq-worker 日志 |
 | 数据只进 MongoDB 不进 MySQL | `docker compose logs flask-server` 查看 MySQL 持久化警告日志 |
+| 管理后台无法登录 | 检查 `ADMIN_USERNAME`/`ADMIN_PASSWORD` 环境变量 |
 
 ---
 
@@ -739,6 +981,7 @@ cd C_end_Simulator
 # 安装依赖
 pip install -r flask_server/requirements.txt
 pip install -r engine/requirements.txt
+pip install -r tests/requirements.txt
 
 # 运行测试（不需要真实 Docker 环境）
 python -m pytest -m "not docker" --ignore=ui_gui -q
@@ -748,7 +991,31 @@ python -m pytest tests/test_vx_api.py tests/test_internal_services.py -v
 
 # 仅运行 vx API 测试
 python -m pytest tests/test_vx_api.py -v
+
+# 运行数据生成测试
+python -m pytest tests/test_step1_data_generation.py -v
 ```
+
+---
+
+## 技术栈总览
+
+| 层级 | 技术 |
+|------|------|
+| 消息队列 | RabbitMQ 3（AMQP 0.9.1） |
+| NoSQL 数据库 | MongoDB 7 |
+| SQL 数据库 | MySQL 8 |
+| 后端 API | Flask + Gunicorn |
+| 设备模拟引擎 | Python 3.12（NumPy + 自研 OOP 引擎） |
+| 终端监控 | Textual（TUI 框架） |
+| 桌面监控 | PyQt6 |
+| 微信小程序 | 原生开发（WXML/WXSS/JS） |
+| 管理后台前端 | 原生 HTML5 + CSS3 + JavaScript |
+| 反向代理 | Nginx（SSL/TLS via Let's Encrypt） |
+| 认证方案 | JWT + API Key + HMAC-SHA256 |
+| 容器化 | Docker + Docker Compose |
+| 测试框架 | pytest + mongomock |
+| CI/CD | Jenkins |
 
 ---
 
