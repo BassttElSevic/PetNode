@@ -162,6 +162,73 @@ PetNode/
 
 ## 技术架构概览
 
+```mermaid
+flowchart TB
+    %% ===== 前端层 =====
+    subgraph Frontend["🖥️ 前端层（Client）"]
+        WX["📱 微信小程序<br/>WeChat Mini Program<br/>(utils/api.js)"]
+        WEB["🌐 Web 管理后台<br/>admin.html<br/>(PetNode.com)"]
+    end
+
+    %% ===== 网关层 =====
+    subgraph Gateway["🔀 网关层"]
+        NGINX["Nginx 反向代理<br/>pppetnode.com:443<br/>/api/ → Flask :5000<br/>/ → 静态前端"]
+    end
+
+    %% ===== 服务层 =====
+    subgraph Service["⚙️ 服务层（Docker Compose）"]
+        FLASK["🐍 Flask Server :5000<br/>── 设备数据层 POST /api/data<br/>── 微信端 API /api/v1/wechat/*<br/>── 管理端 API /api/v1/admin/*"]
+        MQ_WORKER["🔧 MQ Worker<br/>(RabbitMQ 消费者)<br/>验签 + 双写入库"]
+    end
+
+    %% ===== 消息层 =====
+    subgraph MsgQueue["📨 消息队列层"]
+        RABBIT["🐰 RabbitMQ<br/>:6200 AMQP / :16200 管理台<br/>queue: petnode.records"]
+    end
+
+    %% ===== 数据生成层 =====
+    subgraph Engine["🏭 数据生成层（C端模拟）"]
+        ENG["🐕 Engine<br/>SmartCollar × 10<br/>1 tick/s 数据生成"]
+    end
+
+    %% ===== 持久化层 =====
+    subgraph Storage["💾 持久化层"]
+        MONGO[("🍃 MongoDB :27017<br/>全量实时遥测数据<br/>集合: received_records")]
+        MYSQL[("🐬 MySQL :3306<br/>规范化档案 + 异常记录<br/>表: user/device/telemetry/event")]
+    end
+
+    %% ===== 连接关系 =====
+    WX -->|"HTTPS /api/v1/*"| NGINX
+    WEB -->|"HTTPS /api/v1/admin/*"| NGINX
+    NGINX -->|"反向代理"| FLASK
+
+    ENG -->|"AMQP 推送<br/>(默认模式)"| RABBIT
+    ENG -.->|"HTTP POST /api/data<br/>(备选模式)"| FLASK
+    RABBIT -->|"AMQP 消费"| MQ_WORKER
+
+    FLASK -->|"双写"| MONGO
+    FLASK -->|"双写"| MYSQL
+    MQ_WORKER -->|"双写"| MONGO
+    MQ_WORKER -->|"双写"| MYSQL
+
+    %% ===== 样式 =====
+    classDef frontend fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef gateway fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef mq fill:#fce4ec,stroke:#c62828,stroke-width:2px
+    classDef engine fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storage fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+
+    class WX,WEB frontend
+    class NGINX gateway
+    class FLASK,MQ_WORKER service
+    class RABBIT mq
+    class ENG engine
+    class MONGO,MYSQL storage
+```
+
+> 💡 上图使用 Mermaid 语法，GitHub 会自动渲染。下方 ASCII 版本供终端查看。
+
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
 │                        Docker Compose 编排                                      │
