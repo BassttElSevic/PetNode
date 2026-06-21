@@ -271,9 +271,9 @@ PetNode/
   │                       │              │                                 │
   │  HttpExporter          │              │  MqExporter                     │
   │  POST /api/data        │              │  → RabbitMQ queue               │
-  │  Authorization: ******              │    petnode.records              │
+  │  Authorization: Bearer              │    petnode.records              │
   │  X-Signature: HMAC-256 │              │  headers:                       │
-  └───────────┬───────────┘              │    Authorization: ******
+  └───────────┬───────────┘              │    Authorization: Bearer
               │                          │    X-Signature: HMAC-256        │
               ▼                          └──────────────┬──────────────────┘
   ┌───────────────────────┐                             │
@@ -368,7 +368,7 @@ PetNode/
 
 | 方法 | 路径 | 鉴权方式 | 说明 |
 |------|------|---------|------|
-| `POST` | `/api/data` | ****** Key + HMAC-SHA256 签名 | 接收一条设备遥测数据（Engine 专用入口） |
+| `POST` | `/api/data` | Bearer API Key + HMAC-SHA256 签名 | 接收一条设备遥测数据（Engine 专用入口） |
 | `GET` | `/api/health` | 无 | 服务健康检查，返回 `status: healthy` |
 | `GET` | `/api/records` | 无 | 统一查询接口（`source=mongo\|mysql`, `kind=records\|anomalies\|profile`） |
 | `GET` | `/api/v1/records` | 无 | 同上（v1 别名） |
@@ -383,7 +383,7 @@ PetNode/
 
 ```http
 POST /api/data
-Authorization: ******
+Authorization: Bearer <API_KEY>
 X-Signature: <HMAC-SHA256(request_body)>
 Content-Type: application/json
 
@@ -407,7 +407,7 @@ Content-Type: application/json
 
 ### 微信端 API（微信小程序 → Flask）
 
-> 所有 `/api/v1/*` 接口均使用 JWT ******
+> 所有 `/api/v1/*` 接口均使用 JWT Bearer Token 鉴权（`access_token`，7天有效）。
 > 统一响应格式：`{"code": 0, "message": "ok", "data": {...}}`
 
 #### 1. 微信认证模块
@@ -415,8 +415,8 @@ Content-Type: application/json
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
 | `POST` | `/api/v1/wechat/auth` | 无 | wx.login() code 换取微信身份票据；已绑定则同时返回 access_token |
-| `POST` | `/api/v1/wechat/bind` | 可选 ****** 微信身份绑定系统用户；无 token 时自动创建新用户 |
-| `POST` | `/api/v1/wechat/unbind` | ✅ ****** 解除当前用户微信绑定 |
+| `POST` | `/api/v1/wechat/bind` | 可选 Bearer | 微信身份绑定系统用户；无 token 时自动创建新用户 |
+| `POST` | `/api/v1/wechat/unbind` | ✅ Bearer | 解除当前用户微信绑定 |
 
 **`POST /api/v1/wechat/auth`**
 
@@ -431,14 +431,14 @@ Content-Type: application/json
 
 ```
 请求体：{ "wx_identity_token": "<由/wechat/auth返回>" }
-可选头：Authorization: ******
+可选头：Authorization: Bearer <已有access_token>（用于绑定到现有账号）
 返回：{ "bind_status": "bound"|"already_bound", "user_id": "...", "bound_at": "...", "access_token": "..." }
 ```
 
 **`POST /api/v1/wechat/unbind`**
 
 ```
-请求头：Authorization: ******
+请求头：Authorization: Bearer <access_token>
 返回：{ "unbind_status": "unbound"|"not_bound", "user_id": "...", "unbound_at": "..." }
 ```
 
@@ -448,8 +448,8 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `GET` | `/api/v1/me` | ✅ ****** 查询当前用户基本信息 + 绑定宠物列表 |
-| `PUT` | `/api/v1/me` | ✅ ****** 修改用户昵称/头像 |
+| `GET` | `/api/v1/me` | ✅ Bearer | 查询当前用户基本信息 + 绑定宠物列表 |
+| `PUT` | `/api/v1/me` | ✅ Bearer | 修改用户昵称/头像 |
 
 **`GET /api/v1/me`**
 
@@ -476,8 +476,8 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `POST` | `/api/v1/devices/bind` | ✅ ****** 认领设备（项圈），建立宠物档案 |
-| `POST` | `/api/v1/devices/{device_id}/unbind` | ✅ ****** 解除设备绑定 |
+| `POST` | `/api/v1/devices/bind` | ✅ Bearer | 认领设备（项圈），建立宠物档案 |
+| `POST` | `/api/v1/devices/{device_id}/unbind` | ✅ Bearer | 解除设备绑定 |
 
 **`POST /api/v1/devices/bind`**
 
@@ -505,17 +505,17 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `GET` | `/api/v1/pets` | ✅ ****** 宠物列表（本人绑定 + 家庭共享） |
-| `GET` | `/api/v1/pets/{pet_id}/summary` | ✅ ****** 宠物首页概览（最新快照） |
-| `GET` | `/api/v1/pets/{pet_id}/respiration/latest` | ✅ ****** 最新呼吸频率 |
-| `GET` | `/api/v1/pets/{pet_id}/respiration/series` | ✅ ****** 呼吸频率时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/heart-rate/latest` | ✅ ****** 最新心率 |
-| `GET` | `/api/v1/pets/{pet_id}/heart-rate/series` | ✅ ****** 心率时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/temperature/series` | ✅ ****** 体温时序曲线 |
-| `GET` | `/api/v1/pets/{pet_id}/location/latest` | ✅ ****** 最新 GPS 定位 |
-| `GET` | `/api/v1/pets/{pet_id}/events` | ✅ ****** 告警事件分页列表 |
-| `PUT` | `/api/v1/pets/{pet_id}/events/{event_id}/read` | ✅ ****** 标记告警已读（消除红点） |
-| `PUT` | `/api/v1/pets/{pet_id}` | ✅ ****** 修改宠物档案（仅 owner） |
+| `GET` | `/api/v1/pets` | ✅ Bearer | 宠物列表（本人绑定 + 家庭共享） |
+| `GET` | `/api/v1/pets/{pet_id}/summary` | ✅ Bearer | 宠物首页概览（最新快照） |
+| `GET` | `/api/v1/pets/{pet_id}/respiration/latest` | ✅ Bearer | 最新呼吸频率 |
+| `GET` | `/api/v1/pets/{pet_id}/respiration/series` | ✅ Bearer | 呼吸频率时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/heart-rate/latest` | ✅ Bearer | 最新心率 |
+| `GET` | `/api/v1/pets/{pet_id}/heart-rate/series` | ✅ Bearer | 心率时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/temperature/series` | ✅ Bearer | 体温时序曲线 |
+| `GET` | `/api/v1/pets/{pet_id}/location/latest` | ✅ Bearer | 最新 GPS 定位 |
+| `GET` | `/api/v1/pets/{pet_id}/events` | ✅ Bearer | 告警事件分页列表 |
+| `PUT` | `/api/v1/pets/{pet_id}/events/{event_id}/read` | ✅ Bearer | 标记告警已读（消除红点） |
+| `PUT` | `/api/v1/pets/{pet_id}` | ✅ Bearer | 修改宠物档案（仅 owner） |
 
 **时序接口公共查询参数：**
 
@@ -573,11 +573,11 @@ Content-Type: application/json
 
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|
-| `POST` | `/api/v1/family` | ✅ ****** 创建家庭组（幂等） |
-| `POST` | `/api/v1/family/invite` | ✅ ****** 生成邀请码（Owner 专用） |
-| `POST` | `/api/v1/family/join` | ✅ ****** 扫码加入家庭 |
-| `GET` | `/api/v1/family/members` | ✅ ****** 查看家庭成员列表 |
-| `DELETE` | `/api/v1/family/members/{user_id}` | ✅ ****** Owner 踢人 / 成员主动退出 |
+| `POST` | `/api/v1/family` | ✅ Bearer | 创建家庭组（幂等） |
+| `POST` | `/api/v1/family/invite` | ✅ Bearer | 生成邀请码（Owner 专用） |
+| `POST` | `/api/v1/family/join` | ✅ Bearer | 扫码加入家庭 |
+| `GET` | `/api/v1/family/members` | ✅ Bearer | 查看家庭成员列表 |
+| `DELETE` | `/api/v1/family/members/{user_id}` | ✅ Bearer | Owner 踢人 / 成员主动退出 |
 
 **`POST /api/v1/family/invite`**
 
@@ -803,8 +803,8 @@ family_invites              邀请码
 
 6. **API Key vs JWT**：
    - `POST /api/data`（Engine 专用）：使用固定 API Key + HMAC 签名鉴权
-   - `/api/v1/*`（微信端）：使用 JWT ****** 鉴权
-   - `/api/v1/admin/*`（管理端）：登录后使用 JWT ******
+   - `/api/v1/*`（微信端）：使用 JWT Bearer Token 鉴权
+   - `/api/v1/admin/*`（管理端）：登录后使用 JWT Bearer Token 鉴权
 
 7. **管理员账号**：通过 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 环境变量配置（默认为测试账号，生产环境必须修改）。
 
